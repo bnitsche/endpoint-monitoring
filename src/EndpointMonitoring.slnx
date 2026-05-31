@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="EndpointMonitoring.MonitoringService/EndpointMonitoring.MonitoringService.csproj" />
+  <Project Path="EndpointMonitoring.Web/EndpointMonitoring.Web.csproj" />
+  <Project Path="EndpointMonitoring.AppHost/EndpointMonitoring.AppHost.csproj" />
+  <Project Path="EndpointMonitoring.Core/EndpointMonitoring.Core.csproj" />
+  <Project Path="EndpointMonitoring.ServiceDefaults/EndpointMonitoring.ServiceDefaults.csproj" />
+</Solution>

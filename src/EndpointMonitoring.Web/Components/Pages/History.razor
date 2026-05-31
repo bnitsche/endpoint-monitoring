@@ -1,0 +1,118 @@
+@page "/history"
+@using EndpointMonitoring.Core.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>History – Endpoint Monitoring</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">History</MudText>
+
+<MudGrid Class="mb-4" Spacing="2">
+    <MudItem xs="12" sm="4">
+        <MudSelect @bind-Value="_selectedEndpointId" Label="Endpoint" AnchorOrigin="Origin.BottomLeft"
+                   Clearable="true" ClearIcon="@Icons.Material.Filled.Clear">
+            @foreach (var ep in _endpoints)
+            {
+                <MudSelectItem Value="ep.Id">@ep.Name</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="3">
+        <MudDatePicker @bind-Date="_from" Label="From" />
+    </MudItem>
+    <MudItem xs="12" sm="3">
+        <MudDatePicker @bind-Date="_to" Label="To" />
+    </MudItem>
+    <MudItem xs="12" sm="2" Class="d-flex align-end">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadResultsAsync"
+                   StartIcon="@Icons.Material.Filled.Search" FullWidth="true">Search</MudButton>
+    </MudItem>
+</MudGrid>
+
+<MudTable Items="_results" Hover="true" Dense="true" Elevation="2" Loading="_loading">
+    <HeaderContent>
+        <MudTh>Endpoint</MudTh>
+        <MudTh>Checked At</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Response (ms)</MudTh>
+        <MudTh>Message</MudTh>
+        <MudTh>Details</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.EndpointName</MudTd>
+        <MudTd>@context.CheckedAt.ToLocalTime().ToString("g")</MudTd>
+        <MudTd>
+            @if (context.IsSuccess)
+            {
+                <MudChip T="string" Color="Color.Success" Size="Size.Small">OK</MudChip>
+            }
+            else
+            {
+                <MudChip T="string" Color="Color.Error" Size="Size.Small">FAIL</MudChip>
+            }
+        </MudTd>
+        <MudTd>@(context.ResponseTimeMs?.ToString() ?? "–")</MudTd>
+        <MudTd>@(context.StatusMessage ?? "–")</MudTd>
+        <MudTd>
+            <MudTooltip Text="@context.Details" Placement="Placement.Left">
+                <MudText Typo="Typo.caption" Style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;">
+                    @context.Details
+                </MudText>
+            </MudTooltip>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No results found for the selected filters.</MudText>
+    </NoRecordsContent>
+    <PagerContent>
+        <MudTablePager PageSizeOptions="new[] {25, 50, 100}" />
+    </PagerContent>
+</MudTable>
+
+@code {
+    private bool _loading;
+    private List<MonitoredEndpoint> _endpoints = [];
+    private int? _selectedEndpointId;
+    private DateTime? _from = DateTime.Today.AddDays(-7);
+    private DateTime? _to = DateTime.Today.AddDays(1);
+    private List<ResultRow> _results = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _endpoints = await db.Endpoints.OrderBy(e => e.Name).ToListAsync();
+        await LoadResultsAsync();
+    }
+
+    private async Task LoadResultsAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var query = db.Results
+            .Include(r => r.Endpoint)
+            .AsQueryable();
+
+        if (_selectedEndpointId.HasValue)
+            query = query.Where(r => r.EndpointId == _selectedEndpointId.Value);
+
+        if (_from.HasValue)
+            query = query.Where(r => r.CheckedAt >= _from.Value.ToUniversalTime());
+
+        if (_to.HasValue)
+            query = query.Where(r => r.CheckedAt <= _to.Value.ToUniversalTime());
+
+        _results = await query
+            .OrderByDescending(r => r.CheckedAt)
+            .Take(500)
+            .Select(r => new ResultRow(r.Endpoint.Name, r.CheckedAt, r.IsSuccess, r.ResponseTimeMs, r.StatusMessage, r.Details))
+            .ToListAsync();
+
+        _loading = false;
+    }
+
+    private record ResultRow(string EndpointName, DateTime CheckedAt, bool IsSuccess,
+                              int? ResponseTimeMs, string? StatusMessage, string? Details);
+}

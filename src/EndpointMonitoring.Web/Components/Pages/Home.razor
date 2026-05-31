@@ -1,0 +1,128 @@
+@page "/"
+@using EndpointMonitoring.Core.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>Dashboard – Endpoint Monitoring</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Dashboard</MudText>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+}
+else
+{
+    <MudGrid Spacing="3" Class="mb-6">
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.overline" Color="Color.Default">Total Endpoints</MudText>
+                <MudText Typo="Typo.h4">@_total</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.overline" Color="Color.Success">Healthy</MudText>
+                <MudText Typo="Typo.h4" Color="Color.Success">@_healthy</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.overline" Color="Color.Error">Failing</MudText>
+                <MudText Typo="Typo.h4" Color="Color.Error">@_failing</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.overline" Color="Color.Warning">No Data</MudText>
+                <MudText Typo="Typo.h4" Color="Color.Warning">@_noData</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudTable Items="_statusRows" Hover="true" Dense="true" Elevation="2">
+        <ToolBarContent>
+            <MudText Typo="Typo.h6">Endpoint Status</MudText>
+            <MudSpacer />
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" />
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Provider</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Last Check</MudTh>
+            <MudTh>Response (ms)</MudTh>
+            <MudTh>Message</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Name</MudTd>
+            <MudTd>
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@context.ProviderType</MudChip>
+            </MudTd>
+            <MudTd>
+                @if (!context.HasResult)
+                {
+                    <MudChip T="string" Color="Color.Default" Size="Size.Small">No data</MudChip>
+                }
+                else if (context.IsSuccess == true)
+                {
+                    <MudChip T="string" Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.CheckCircle">OK</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Color="Color.Error" Size="Size.Small" Icon="@Icons.Material.Filled.Error">FAIL</MudChip>
+                }
+            </MudTd>
+            <MudTd>@(context.CheckedAt?.ToLocalTime().ToString("g") ?? "–")</MudTd>
+            <MudTd>@(context.ResponseTimeMs?.ToString() ?? "–")</MudTd>
+            <MudTd>@(context.StatusMessage ?? "–")</MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    private bool _loading = true;
+    private int _total, _healthy, _failing, _noData;
+    private List<StatusRow> _statusRows = [];
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var endpoints = await db.Endpoints
+            .Where(e => e.IsEnabled)
+            .OrderBy(e => e.Name)
+            .ToListAsync();
+
+        var latestResults = await db.Results
+            .Where(r => endpoints.Select(e => e.Id).Contains(r.EndpointId))
+            .GroupBy(r => r.EndpointId)
+            .Select(g => g.OrderByDescending(r => r.CheckedAt).First())
+            .ToListAsync();
+
+        _statusRows = endpoints.Select(e =>
+        {
+            var result = latestResults.FirstOrDefault(r => r.EndpointId == e.Id);
+            return new StatusRow(e.Name, e.ProviderType, result?.IsSuccess, result?.CheckedAt,
+                                 result?.ResponseTimeMs, result?.StatusMessage);
+        }).ToList();
+
+        _total = _statusRows.Count;
+        _healthy = _statusRows.Count(r => r.IsSuccess == true);
+        _failing = _statusRows.Count(r => r.IsSuccess == false);
+        _noData = _statusRows.Count(r => r.IsSuccess == null);
+
+        _loading = false;
+    }
+
+    private record StatusRow(string Name, string ProviderType, bool? IsSuccess, DateTime? CheckedAt,
+                              int? ResponseTimeMs, string? StatusMessage)
+    {
+        public bool HasResult => IsSuccess.HasValue;
+    }
+}

@@ -1,0 +1,200 @@
+@using System.Text.Json
+@using EndpointMonitoring.Core.Data
+@using EndpointMonitoring.Core.Models
+@using EndpointMonitoring.Core.Providers
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject MonitoringProviderRegistry ProviderRegistry
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(Model.Id == 0 ? "Add Endpoint" : "Edit Endpoint")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+
+            <MudTextField @bind-Value="Model.Name" Label="Name" Required="true" Class="mb-3"
+                          RequiredError="Name is required." />
+            <MudTextField @bind-Value="Model.Description" Label="Description" Class="mb-3" />
+
+            <MudSelect T="string" Value="Model.ProviderType" Label="Provider" Required="true" Class="mb-3"
+                       RequiredError="Please select a provider."
+                       AnchorOrigin="Origin.BottomLeft"
+                       ValueChanged="OnProviderChanged">
+                @foreach (var p in ProviderRegistry.GetAll())
+                {
+                    <MudSelectItem Value="@p.ProviderType">@p.DisplayName</MudSelectItem>
+                }
+            </MudSelect>
+
+            @if (_configFields.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle2" Class="mb-2 mt-1">Provider Configuration</MudText>
+                @foreach (var field in _configFields)
+                {
+                    @if (field.FieldType == ProviderConfigFieldType.Number)
+                    {
+                        <MudNumericField Value="GetNumericValue(field.Key, field.DefaultValue)"
+                                         ValueChanged="(double v) => SetFieldValue(field.Key, v.ToString(System.Globalization.CultureInfo.InvariantCulture))"
+                                         Label="@field.Label"
+                                         Required="@field.Required"
+                                         RequiredError="@($"{field.Label} is required.")"
+                                         HelperText="@field.HelperText"
+                                         Class="mb-3" />
+                    }
+                    else
+                    {
+                        <MudTextField Value="GetStringValue(field.Key, field.DefaultValue)"
+                                      ValueChanged="(string v) => SetFieldValue(field.Key, v)"
+                                      Label="@field.Label"
+                                      Required="@field.Required"
+                                      RequiredError="@($"{field.Label} is required.")"
+                                      HelperText="@field.HelperText"
+                                      Class="mb-3"
+                                      InputType="@(field.FieldType == ProviderConfigFieldType.Url ? InputType.Url : InputType.Text)" />
+                    }
+                }
+            }
+
+            <MudNumericField @bind-Value="Model.IntervalSeconds" Label="Interval (seconds)"
+                             Min="5" Max="86400" Class="mb-3"
+                             HelperText="How often to check this endpoint" />
+            <MudSwitch @bind-Value="Model.IsEnabled" Label="Enabled" Color="Color.Success" />
+
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public EndpointEditModel Model { get; set; } = new();
+
+    private MudForm _form = null!;
+    private bool _isValid;
+    private Dictionary<string, string> _fieldValues = [];
+    private IReadOnlyList<ProviderConfigField> _configFields = [];
+
+    protected override void OnParametersSet()
+    {
+        LoadProvider(Model.ProviderType, Model.ProviderConfig);
+    }
+
+    private void OnProviderChanged(string providerType)
+    {
+        Model.ProviderType = providerType;
+        LoadProvider(providerType, "{}");
+    }
+
+    private void LoadProvider(string providerType, string existingJson)
+    {
+        var provider = ProviderRegistry.GetByType(providerType);
+        _configFields = provider?.ConfigFields ?? [];
+
+        _fieldValues = [];
+        if (!string.IsNullOrWhiteSpace(existingJson) && existingJson != "{}")
+        {
+            try
+            {
+                var doc = JsonDocument.Parse(existingJson);
+                foreach (var prop in doc.RootElement.EnumerateObject())
+                    _fieldValues[prop.Name] = prop.Value.ToString();
+            }
+            catch { }
+        }
+
+        foreach (var f in _configFields)
+            _fieldValues.TryAdd(f.Key, f.DefaultValue);
+    }
+
+    private string GetStringValue(string key, string defaultValue) =>
+        _fieldValues.TryGetValue(key, out var v) ? v : defaultValue;
+
+    private double GetNumericValue(string key, string defaultValue) =>
+        double.TryParse(
+            _fieldValues.TryGetValue(key, out var v) ? v : defaultValue,
+            System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var d) ? d : 0;
+
+    private void SetFieldValue(string key, string value) => _fieldValues[key] = value;
+
+    private string BuildConfigJson()
+    {
+        var dict = new Dictionary<string, object?>();
+        foreach (var field in _configFields)
+        {
+            var raw = _fieldValues.TryGetValue(field.Key, out var v) ? v : field.DefaultValue;
+            if (field.FieldType == ProviderConfigFieldType.Number &&
+                double.TryParse(raw, System.Globalization.NumberStyles.Any,
+                                System.Globalization.CultureInfo.InvariantCulture, out var num))
+                dict[field.Key] = num % 1 == 0 ? (object)(long)num : num;
+            else
+                dict[field.Key] = raw;
+        }
+        return JsonSerializer.Serialize(dict);
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid) return;
+
+        var configJson = BuildConfigJson();
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        if (Model.Id == 0)
+        {
+            db.Endpoints.Add(new MonitoredEndpoint
+            {
+                Name = Model.Name,
+                Description = Model.Description,
+                ProviderType = Model.ProviderType,
+                ProviderConfig = configJson,
+                IntervalSeconds = Model.IntervalSeconds,
+                IsEnabled = Model.IsEnabled,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            });
+        }
+        else
+        {
+            var ep = await db.Endpoints.FindAsync(Model.Id);
+            if (ep is not null)
+            {
+                ep.Name = Model.Name;
+                ep.Description = Model.Description;
+                ep.ProviderType = Model.ProviderType;
+                ep.ProviderConfig = configJson;
+                ep.IntervalSeconds = Model.IntervalSeconds;
+                ep.IsEnabled = Model.IsEnabled;
+                ep.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+
+        await db.SaveChangesAsync();
+        Snackbar.Add("Endpoint saved.", Severity.Success);
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    public class EndpointEditModel
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string ProviderType { get; set; } = "";
+        public string ProviderConfig { get; set; } = "{}";
+        public int IntervalSeconds { get; set; } = 60;
+        public bool IsEnabled { get; set; } = true;
+    }
+}

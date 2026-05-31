@@ -1,0 +1,26 @@
+﻿@page "/Error"
+@using System.Diagnostics
+@layout MainLayout
+
+<PageTitle>Error – Endpoint Monitoring</PageTitle>
+
+<MudAlert Severity="Severity.Error" Class="mb-4">
+    <MudText Typo="Typo.h5">An unhandled error occurred.</MudText>
+    @if (ShowRequestId)
+    {
+        <MudText Typo="Typo.body2" Class="mt-2">Request ID: <code>@RequestId</code></MudText>
+    }
+</MudAlert>
+
+<MudText>If the problem persists, check the application logs or contact your administrator.</MudText>
+
+@code {
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private string? RequestId { get; set; }
+    private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
+
+    protected override void OnInitialized() =>
+        RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+}

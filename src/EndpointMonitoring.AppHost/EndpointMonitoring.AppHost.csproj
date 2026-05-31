@@ -1,0 +1,16 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.2.4">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>061d38c3-2423-44d7-8e96-e8a80d52f1f0</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\EndpointMonitoring.MonitoringService\EndpointMonitoring.MonitoringService.csproj" />
+    <ProjectReference Include="..\EndpointMonitoring.Web\EndpointMonitoring.Web.csproj" />
+  </ItemGroup>
+
+</Project>

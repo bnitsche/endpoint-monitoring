@@ -1,0 +1,136 @@
+@page "/endpoints"
+@using EndpointMonitoring.Core.Data
+@using EndpointMonitoring.Core.Models
+@using EndpointMonitoring.Web.Components.Dialogs
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject MonitoringProviderRegistry ProviderRegistry
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Endpoints – Endpoint Monitoring</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Endpoints</MudText>
+
+<MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary"
+           Class="mb-4" OnClick="OpenCreateDialog">Add Endpoint</MudButton>
+
+<MudTable Items="_endpoints" Hover="true" Dense="false" Elevation="2" Loading="_loading">
+    <HeaderContent>
+        <MudTh>Name</MudTh>
+        <MudTh>Provider</MudTh>
+        <MudTh>Interval</MudTh>
+        <MudTh>Enabled</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>
+            <MudText Typo="Typo.body1"><b>@context.Name</b></MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Description</MudText>
+        </MudTd>
+        <MudTd>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@context.ProviderType</MudChip>
+        </MudTd>
+        <MudTd>@context.IntervalSeconds s</MudTd>
+        <MudTd>
+            <MudSwitch Value="context.IsEnabled" Color="Color.Success"
+                       ValueChanged="(bool v) => ToggleEnabledAsync(context, v)" />
+        </MudTd>
+        <MudTd>
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                           OnClick="() => OpenEditDialog(context)" />
+            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                           OnClick="() => DeleteAsync(context)" />
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No endpoints configured. Click "Add Endpoint" to get started.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private bool _loading = true;
+    private List<MonitoredEndpoint> _endpoints = [];
+
+    private static readonly DialogOptions _dialogOptions = new()
+    {
+        MaxWidth = MaxWidth.Medium,
+        FullWidth = true,
+        CloseOnEscapeKey = true
+    };
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _endpoints = await db.Endpoints.OrderBy(e => e.Name).ToListAsync();
+        _loading = false;
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var model = new EndpointDialog.EndpointEditModel
+        {
+            ProviderType = ProviderRegistry.GetAll().FirstOrDefault()?.ProviderType ?? ""
+        };
+
+        var parameters = new DialogParameters<EndpointDialog> { { x => x.Model, model } };
+        var dialog = await DialogService.ShowAsync<EndpointDialog>("Add Endpoint", parameters, _dialogOptions);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+            await LoadAsync();
+    }
+
+    private async Task OpenEditDialog(MonitoredEndpoint ep)
+    {
+        var model = new EndpointDialog.EndpointEditModel
+        {
+            Id = ep.Id,
+            Name = ep.Name,
+            Description = ep.Description,
+            ProviderType = ep.ProviderType,
+            ProviderConfig = ep.ProviderConfig,
+            IntervalSeconds = ep.IntervalSeconds,
+            IsEnabled = ep.IsEnabled
+        };
+
+        var parameters = new DialogParameters<EndpointDialog> { { x => x.Model, model } };
+        var dialog = await DialogService.ShowAsync<EndpointDialog>("Edit Endpoint", parameters, _dialogOptions);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+            await LoadAsync();
+    }
+
+    private async Task ToggleEnabledAsync(MonitoredEndpoint ep, bool value)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var entity = await db.Endpoints.FindAsync(ep.Id);
+        if (entity is null) return;
+        entity.IsEnabled = value;
+        entity.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync(MonitoredEndpoint ep)
+    {
+        var msgBoxParams = new DialogParameters<MudMessageBox>
+        {
+            { x => x.Message, $"Delete '{ep.Name}'? All history will also be removed." }
+        };
+        var msgBox = await DialogService.ShowAsync<MudMessageBox>("Delete Endpoint", msgBoxParams);
+        var result = await msgBox.Result;
+        if (result is null || result.Canceled) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var entity = await db.Endpoints.FindAsync(ep.Id);
+        if (entity is not null) db.Endpoints.Remove(entity);
+        await db.SaveChangesAsync();
+        Snackbar.Add("Endpoint deleted.", Severity.Info);
+        await LoadAsync();
+    }
+}
