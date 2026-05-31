@@ -31,7 +31,20 @@ builder.Services.AddHttpClient("monitoring")
 builder.Services.AddMudServices();
 
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents()
+    .AddCircuitOptions(options =>
+    {
+        // Keep disconnected circuits alive for 5 minutes so brief debugger
+        // pauses or network hiccups don't lose the Blazor circuit.
+        options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(5);
+    });
+
+builder.Services.AddSignalR(options =>
+{
+    // Give the client more time to respond before the server drops the connection.
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+});
 
 var app = builder.Build();
 
@@ -49,9 +62,9 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
+    app.UseHttpsRedirection();
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-app.UseHttpsRedirection();
 
 app.UseAntiforgery();
 

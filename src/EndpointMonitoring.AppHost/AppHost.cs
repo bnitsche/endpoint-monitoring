@@ -11,7 +11,6 @@ builder.AddProject<Projects.EndpointMonitoring_Web>("webfrontend")
     .WithExternalHttpEndpoints()
     .WithHttpHealthCheck("/health")
     .WithEnvironment("DatabasePath", dbPath)
-    .WithReference(monitoringService)
     .WaitFor(monitoringService);
 
 builder.Build().Run();
