@@ -35,8 +35,22 @@ public class FritzBoxMonitoringProvider : IMonitoringProvider
         if (!JsonConfigHelper.TryDeserialize<FritzBoxConfig>(providerConfig, out var cfg))
             return MonitoringCheckResult.Failure("Invalid config", "Could not parse provider configuration JSON.");
 
-        var host = string.IsNullOrWhiteSpace(cfg.Host) ? "fritz.box" : cfg.Host;
+        var rawHost = string.IsNullOrWhiteSpace(cfg.Host) ? "fritz.box" : cfg.Host.Trim();
         var port = cfg.Port > 0 ? cfg.Port : 49000;
+
+        // If the user pasted a full URL (e.g. https://fritz.box:6656), extract only the host and port.
+        string host;
+        if (Uri.TryCreate(rawHost, UriKind.Absolute, out var parsedUri))
+        {
+            host = parsedUri.Host;
+            if (parsedUri.Port > 0)
+                port = parsedUri.Port;
+        }
+        else
+        {
+            host = rawHost;
+        }
+
         var url = $"http://{host}:{port}/igdupnp/control/WANIPConn1";
 
         const string soapBody = """
