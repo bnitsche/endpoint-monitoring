@@ -42,6 +42,7 @@ public static class AuthBootstrapper
 
         await db.Database.ExecuteSqlRawAsync(CreateTableSql);
         await db.Database.ExecuteSqlRawAsync(CreateIndexSql);
+        await EnsureNewColumnsAsync(db);
 
         if (await db.Users.AnyAsync())
             return;
@@ -67,5 +68,23 @@ public static class AuthBootstrapper
             "Seeded default admin user '{Username}'. CHANGE THIS PASSWORD via the Users page " +
             "or the Auth:DefaultAdmin configuration (user-secrets / environment variables).",
             username);
+    }
+
+    private static async Task EnsureNewColumnsAsync(AppDbContext db)
+    {
+        // SQLite has no ALTER TABLE ... ADD COLUMN IF NOT EXISTS, so check PRAGMA first.
+        var userCols = await db.Database
+            .SqlQueryRaw<string>("SELECT name FROM pragma_table_info('Users')")
+            .ToListAsync();
+        if (!userCols.Contains("SendNotification"))
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE \"Users\" ADD COLUMN \"SendNotification\" INTEGER NOT NULL DEFAULT 0;");
+
+        var epCols = await db.Database
+            .SqlQueryRaw<string>("SELECT name FROM pragma_table_info('Endpoints')")
+            .ToListAsync();
+        if (!epCols.Contains("AlertSentAt"))
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE \"Endpoints\" ADD COLUMN \"AlertSentAt\" TEXT NULL;");
     }
 }

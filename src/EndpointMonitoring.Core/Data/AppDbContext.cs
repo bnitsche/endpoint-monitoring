@@ -17,6 +17,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Name).IsRequired().HasMaxLength(200);
             e.Property(x => x.ProviderType).IsRequired().HasMaxLength(100);
             e.Property(x => x.ProviderConfig).IsRequired();
+            e.Property(x => x.AlertSentAt).IsRequired(false);
             e.HasMany(x => x.Results)
              .WithOne(r => r.Endpoint)
              .HasForeignKey(r => r.EndpointId)
@@ -35,6 +36,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Username).IsRequired().HasMaxLength(256);
             e.HasIndex(x => x.Username).IsUnique();
             e.Property(x => x.Role).IsRequired().HasMaxLength(50);
+            e.Property(x => x.SendNotification).IsRequired().HasDefaultValue(false);
         });
     }
 }

@@ -427,3 +427,5 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+/src/EndpointMonitoring.MonitoringService/appsettings.Development.json
+/src/EndpointMonitoring.Web/appsettings.Development.json

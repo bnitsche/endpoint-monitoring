@@ -4,6 +4,8 @@ using EndpointMonitoring.Core.Providers.FritzBox;
 using EndpointMonitoring.Core.Providers.Http;
 using EndpointMonitoring.Core.Providers.Ping;
 using EndpointMonitoring.MonitoringService;
+using EndpointMonitoring.Core.Notifications;
+using EndpointMonitoring.MonitoringService.Notifications;
 using Microsoft.EntityFrameworkCore;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -31,6 +33,12 @@ builder.Services.AddHttpClient("monitoring")
 
 builder.Services.AddHostedService<EndpointMonitoringWorker>();
 
+var smtpSettings = builder.Configuration
+    .GetSection(SmtpSettings.SectionName)
+    .Get<SmtpSettings>() ?? new SmtpSettings();
+builder.Services.AddSingleton(smtpSettings);
+builder.Services.AddSingleton<EmailNotificationService>();
+
 var host = builder.Build();
 
 using (var scope = host.Services.CreateScope())
@@ -39,6 +47,22 @@ using (var scope = host.Services.CreateScope())
     using var ctx = factory.CreateDbContext();
     ctx.Database.EnsureCreated();
     ctx.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
+
+    // Add new columns to existing databases — EnsureCreated won't add them.
+    // SQLite has no IF NOT EXISTS for ALTER TABLE, so check PRAGMA first.
+    var userCols = ctx.Database
+        .SqlQueryRaw<string>("SELECT name FROM pragma_table_info('Users')")
+        .ToList();
+    if (!userCols.Contains("SendNotification"))
+        ctx.Database.ExecuteSqlRaw(
+            "ALTER TABLE \"Users\" ADD COLUMN \"SendNotification\" INTEGER NOT NULL DEFAULT 0;");
+
+    var epCols = ctx.Database
+        .SqlQueryRaw<string>("SELECT name FROM pragma_table_info('Endpoints')")
+        .ToList();
+    if (!epCols.Contains("AlertSentAt"))
+        ctx.Database.ExecuteSqlRaw(
+            "ALTER TABLE \"Endpoints\" ADD COLUMN \"AlertSentAt\" TEXT NULL;");
 }
 
 host.Run();

@@ -5,8 +5,10 @@ using EndpointMonitoring.Core.Models;
 using EndpointMonitoring.Core.Providers.FritzBox;
 using EndpointMonitoring.Core.Providers.Http;
 using EndpointMonitoring.Core.Providers.Ping;
+using EndpointMonitoring.Core.Notifications;
 using EndpointMonitoring.Web.Auth;
 using EndpointMonitoring.Web.Components;
+using EndpointMonitoring.Web.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
@@ -38,6 +40,12 @@ builder.Services.AddHttpClient("monitoring")
     });
 
 builder.Services.AddMudServices();
+
+var smtpSettings = builder.Configuration
+    .GetSection(SmtpSettings.SectionName)
+    .Get<SmtpSettings>() ?? new SmtpSettings();
+builder.Services.AddSingleton(smtpSettings);
+builder.Services.AddSingleton<TestEmailService>();
 
 // ---- Authentication & authorization ----------------------------------------------------
 var oidc = builder.Configuration.GetSection(OidcOptions.SectionName).Get<OidcOptions>() ?? new OidcOptions();

@@ -24,6 +24,8 @@
             <MudTextField @bind-Value="Model.DisplayName" Label="Display Name" Class="mb-3" />
             <MudTextField @bind-Value="Model.Email" Label="Email" Class="mb-3" InputType="InputType.Email" />
 
+            <MudCheckBox @bind-Value="Model.SendNotification" Label="Send email notifications on failure" Class="mb-3" />
+
             <MudSelect T="string" @bind-Value="Model.Role" Label="Role" Required="true"
                        AnchorOrigin="Origin.BottomLeft" RequiredError="Role is required.">
                 <MudSelectItem Value="@AppRoles.Admin">Admin</MudSelectItem>
@@ -68,9 +70,9 @@
         try
         {
             if (Model.Id == 0)
-                await UserAuth.CreateAsync(Model.Username, Model.Password, Model.Role, Model.Email, Model.DisplayName);
+                await UserAuth.CreateAsync(Model.Username, Model.Password, Model.Role, Model.Email, Model.DisplayName, Model.SendNotification);
             else
-                await UserAuth.UpdateAsync(Model.Id, Model.Role, Model.Email, Model.DisplayName);
+                await UserAuth.UpdateAsync(Model.Id, Model.Role, Model.Email, Model.DisplayName, Model.SendNotification);
         }
         catch (AuthOperationException ex)
         {
@@ -91,5 +93,6 @@
         public string? Email { get; set; }
         public string? DisplayName { get; set; }
         public bool IsExternal { get; set; }
+        public bool SendNotification { get; set; }
     }
 }

@@ -22,5 +22,8 @@ public class User
     /// <summary>True when the account was provisioned via an external OIDC provider.</summary>
     public bool IsExternal { get; set; }
 
+    /// <summary>When true, this user receives failure alert emails.</summary>
+    public bool SendNotification { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

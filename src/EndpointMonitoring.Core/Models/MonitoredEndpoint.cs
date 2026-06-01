@@ -12,5 +12,11 @@ public class MonitoredEndpoint
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// Set to UTC time when the failure alert email was sent for the current outage.
+    /// Null means no alert is active. Cleared on recovery or admin acknowledgement.
+    /// </summary>
+    public DateTime? AlertSentAt { get; set; }
+
     public ICollection<MonitoringResult> Results { get; set; } = [];
 }

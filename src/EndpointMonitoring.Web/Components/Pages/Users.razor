@@ -1,9 +1,11 @@
 @page "/users"
 @attribute [Authorize(Policy = "AdminOnly")]
 @using EndpointMonitoring.Web.Components.Dialogs
+@using EndpointMonitoring.Web.Services
 @inject UserAuthService UserAuth
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject TestEmailService TestEmail
 
 <PageTitle>Users – Endpoint Monitoring</PageTitle>
 
@@ -50,6 +52,11 @@
             <MudIconButton Icon="@Icons.Material.Filled.Password" Size="Size.Small"
                            Disabled="context.IsExternal"
                            OnClick="() => OpenResetPasswordDialog(context)" />
+            <MudTooltip Text="@(string.IsNullOrEmpty(context.Email) ? "No email address configured" : "Send test email")">
+                <MudIconButton Icon="@Icons.Material.Filled.MailOutline" Size="Size.Small"
+                               Disabled="string.IsNullOrEmpty(context.Email)"
+                               OnClick="() => SendTestEmailAsync(context)" />
+            </MudTooltip>
             <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                            OnClick="() => DeleteAsync(context)" />
         </MudTd>
@@ -96,7 +103,8 @@
             Role = user.Role,
             Email = user.Email,
             DisplayName = user.DisplayName,
-            IsExternal = user.IsExternal
+            IsExternal = user.IsExternal,
+            SendNotification = user.SendNotification
         };
         var parameters = new DialogParameters<UserDialog> { { x => x.Model, model } };
         var dialog = await DialogService.ShowAsync<UserDialog>("Edit User", parameters, _dialogOptions);
@@ -125,6 +133,20 @@
         catch (AuthOperationException ex)
         {
             Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task SendTestEmailAsync(User user)
+    {
+        if (string.IsNullOrEmpty(user.Email)) return;
+        try
+        {
+            await TestEmail.SendTestEmailAsync(user.Email);
+            Snackbar.Add($"Test email sent to {user.Email}.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to send test email: {ex.Message}", Severity.Error);
         }
     }
 

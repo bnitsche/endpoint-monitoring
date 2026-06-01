@@ -1,7 +1,9 @@
 @page "/"
 @using EndpointMonitoring.Core.Data
+@using EndpointMonitoring.Core.Models
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<AppDbContext> DbFactory
+@inject ISnackbar Snackbar
 
 <PageTitle>Dashboard – Endpoint Monitoring</PageTitle>
 
@@ -53,6 +55,7 @@ else
             <MudTh>Last Check</MudTh>
             <MudTh>Response (ms)</MudTh>
             <MudTh>Message</MudTh>
+            <MudTh></MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd>@context.Name</MudTd>
@@ -76,6 +79,18 @@ else
             <MudTd>@(context.CheckedAt?.ToLocalTime().ToString("g") ?? "–")</MudTd>
             <MudTd>@(context.ResponseTimeMs?.ToString() ?? "–")</MudTd>
             <MudTd>@(context.StatusMessage ?? "–")</MudTd>
+            <MudTd>
+                @if (context.AlertSentAt.HasValue)
+                {
+                    <AuthorizeView Roles="@AppRoles.Admin" Context="authCtx">
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning"
+                                   StartIcon="@Icons.Material.Filled.NotificationsOff"
+                                   OnClick="() => AcknowledgeAsync(context.EndpointId)">
+                            Acknowledge
+                        </MudButton>
+                    </AuthorizeView>
+                }
+            </MudTd>
         </RowTemplate>
     </MudTable>
 }
@@ -108,8 +123,8 @@ else
         _statusRows = endpoints.Select(e =>
         {
             var result = latestResults.FirstOrDefault(r => r.EndpointId == e.Id);
-            return new StatusRow(e.Name, e.ProviderType, result?.IsSuccess, result?.CheckedAt,
-                                 result?.ResponseTimeMs, result?.StatusMessage);
+            return new StatusRow(e.Id, e.Name, e.ProviderType, result?.IsSuccess, result?.CheckedAt,
+                                 result?.ResponseTimeMs, result?.StatusMessage, e.AlertSentAt);
         }).ToList();
 
         _total = _statusRows.Count;
@@ -120,8 +135,20 @@ else
         _loading = false;
     }
 
-    private record StatusRow(string Name, string ProviderType, bool? IsSuccess, DateTime? CheckedAt,
-                              int? ResponseTimeMs, string? StatusMessage)
+    private async Task AcknowledgeAsync(int endpointId)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var endpoint = await db.Endpoints.FindAsync(endpointId);
+        if (endpoint is null) return;
+        endpoint.AlertSentAt = null;
+        await db.SaveChangesAsync();
+        Snackbar.Add("Alert acknowledged. A new notification will be sent if the failure continues.", Severity.Info);
+        await LoadAsync();
+    }
+
+    private record StatusRow(int EndpointId, string Name, string ProviderType, bool? IsSuccess,
+                              DateTime? CheckedAt, int? ResponseTimeMs, string? StatusMessage,
+                              DateTime? AlertSentAt)
     {
         public bool HasResult => IsSuccess.HasValue;
     }

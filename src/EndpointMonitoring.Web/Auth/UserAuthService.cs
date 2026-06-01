@@ -76,7 +76,7 @@ public sealed class UserAuthService(
         return await db.Users.FindAsync(id);
     }
 
-    public async Task CreateAsync(string username, string password, string role, string? email, string? displayName)
+    public async Task CreateAsync(string username, string password, string role, string? email, string? displayName, bool sendNotification = false)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         if (await db.Users.AnyAsync(u => u.Username == username))
@@ -88,6 +88,7 @@ public sealed class UserAuthService(
             Role = role,
             Email = email,
             DisplayName = displayName,
+            SendNotification = sendNotification,
             IsEnabled = true,
             IsExternal = false,
             CreatedAt = DateTime.UtcNow,
@@ -98,7 +99,7 @@ public sealed class UserAuthService(
         await db.SaveChangesAsync();
     }
 
-    public async Task UpdateAsync(int id, string role, string? email, string? displayName)
+    public async Task UpdateAsync(int id, string role, string? email, string? displayName, bool sendNotification = false)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var user = await db.Users.FindAsync(id)
@@ -110,6 +111,7 @@ public sealed class UserAuthService(
         user.Role = role;
         user.Email = email;
         user.DisplayName = displayName;
+        user.SendNotification = sendNotification;
         await db.SaveChangesAsync();
     }
 
