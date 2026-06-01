@@ -1,0 +1,159 @@
+@page "/Account/Login"
+@layout AccountLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Authentication
+@inject UserAuthService UserAuth
+@inject OidcOptions Oidc
+@inject NavigationManager Nav
+
+<PageTitle>Sign in – Endpoint Monitoring</PageTitle>
+
+<MudText Typo="Typo.h5" Align="Align.Center" Class="login-title">Welcome back</MudText>
+<MudText Typo="Typo.body2" Align="Align.Center" Class="login-subtitle">Sign in to continue to your dashboard</MudText>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <MudAlert Severity="Severity.Error" Class="mb-5" Dense="true" Variant="Variant.Filled">@_error</MudAlert>
+}
+
+<EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login">
+    <DataAnnotationsValidator />
+
+    <div class="login-field">
+        <label class="login-label" for="username">Username</label>
+        <div class="login-input-wrap">
+            <MudIcon Icon="@Icons.Material.Outlined.Person" Size="Size.Small" Class="login-input-icon" />
+            <InputText id="username" @bind-Value="Input.Username" class="login-input"
+                       autocomplete="username" placeholder="Enter your username" />
+        </div>
+        <ValidationMessage For="() => Input.Username" class="login-validation" />
+    </div>
+
+    <div class="login-field">
+        <label class="login-label" for="password">Password</label>
+        <div class="login-input-wrap">
+            <MudIcon Icon="@Icons.Material.Outlined.Lock" Size="Size.Small" Class="login-input-icon" />
+            <InputText id="password" type="password" @bind-Value="Input.Password" class="login-input"
+                       autocomplete="current-password" placeholder="Enter your password" />
+        </div>
+        <ValidationMessage For="() => Input.Password" class="login-validation" />
+    </div>
+
+    <label class="login-remember">
+        <InputCheckbox @bind-Value="Input.RememberMe" class="login-checkbox" />
+        <span>Remember me</span>
+    </label>
+
+    <button type="submit" class="login-submit">Sign in</button>
+</EditForm>
+
+@if (Oidc.Enabled)
+{
+    <div class="login-divider">
+        <span class="login-divider-line"></span>
+        <span class="login-divider-text">or</span>
+        <span class="login-divider-line"></span>
+    </div>
+    <a class="login-sso" href="@($"/Account/ExternalLogin?returnUrl={Uri.EscapeDataString(ReturnUrl ?? "/")}")">
+        <MudIcon Icon="@Icons.Material.Filled.Login" Size="Size.Small" Class="mr-2" />
+        Sign in with SSO
+    </a>
+}
+
+<style>
+    .login-title { font-weight: 600; margin-bottom: .25rem; }
+    .login-subtitle { color: var(--mud-palette-text-secondary); margin-bottom: 2rem; }
+
+    .login-field { margin-bottom: 1.25rem; }
+    .login-label { display: block; font-size: .8rem; font-weight: 500;
+        color: var(--mud-palette-text-secondary); margin-bottom: .4rem; }
+
+    .login-input-wrap { position: relative; display: flex; align-items: center; }
+    .login-input-icon { position: absolute; left: .85rem; top: 50%; transform: translateY(-50%);
+        width: 20px !important; height: 20px !important; font-size: 20px !important;
+        color: var(--mud-palette-text-secondary); pointer-events: none; transition: color .15s ease; }
+
+    .login-input { width: 100%; box-sizing: border-box; height: 48px; padding: 0 .9rem 0 2.75rem;
+        border: 1px solid var(--mud-palette-lines-inputs);
+        border-radius: var(--mud-default-borderradius); font-size: .95rem; line-height: 48px;
+        font-family: inherit;
+        background: var(--mud-palette-surface); color: var(--mud-palette-text-primary);
+        transition: border-color .15s ease, box-shadow .15s ease; }
+    .login-input::placeholder { color: var(--mud-palette-text-disabled); }
+    .login-input:hover { border-color: var(--mud-palette-text-secondary); }
+    .login-input:focus { outline: none; border-color: var(--mud-palette-primary);
+        box-shadow: 0 0 0 3px rgba(var(--mud-palette-primary-rgb), .18); }
+    .login-input-wrap:focus-within .login-input-icon { color: var(--mud-palette-primary); }
+
+    .login-validation { display: block; color: var(--mud-palette-error); font-size: .75rem; margin-top: .35rem; }
+
+    .login-remember { display: flex; align-items: center; gap: .5rem; margin: .25rem 0 1.75rem;
+        font-size: .9rem; color: var(--mud-palette-text-primary); cursor: pointer; user-select: none; }
+    .login-checkbox { width: 1.05rem; height: 1.05rem; accent-color: var(--mud-palette-primary); cursor: pointer; }
+
+    .login-submit { width: 100%; height: 48px; border: none; cursor: pointer;
+        border-radius: var(--mud-default-borderradius); font-size: .95rem; font-weight: 600;
+        font-family: inherit; letter-spacing: .02em; color: var(--mud-palette-primary-text);
+        background: var(--mud-palette-primary); transition: filter .15s ease, box-shadow .15s ease;
+        box-shadow: 0 2px 6px rgba(var(--mud-palette-primary-rgb), .35); }
+    .login-submit:hover { filter: brightness(1.07); box-shadow: 0 4px 12px rgba(var(--mud-palette-primary-rgb), .45); }
+    .login-submit:active { filter: brightness(.96); }
+
+    .login-divider { display: flex; align-items: center; gap: .75rem; margin: 1.75rem 0 1.25rem; }
+    .login-divider-line { flex: 1; height: 1px; background: var(--mud-palette-lines-default); }
+    .login-divider-text { font-size: .8rem; color: var(--mud-palette-text-secondary); text-transform: uppercase; }
+
+    .login-sso { display: flex; align-items: center; justify-content: center; width: 100%; height: 48px;
+        text-decoration: none; border-radius: var(--mud-default-borderradius); font-size: .95rem; font-weight: 500;
+        color: var(--mud-palette-primary); border: 1px solid var(--mud-palette-primary);
+        background: transparent; transition: background-color .15s ease; }
+    .login-sso:hover { background: rgba(var(--mud-palette-primary-rgb), .08); }
+    .login-sso .mud-icon-root { width: 20px !important; height: 20px !important; font-size: 20px !important; }
+</style>
+
+@code {
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    private string? _error;
+
+    private async Task LoginUser()
+    {
+        var user = await UserAuth.ValidateCredentialsAsync(Input.Username, Input.Password);
+        if (user is null)
+        {
+            _error = "Invalid username or password.";
+            return;
+        }
+
+        var principal = UserAuthService.BuildPrincipal(user, AuthSchemes.Cookie);
+        var props = new AuthenticationProperties
+        {
+            IsPersistent = Input.RememberMe,
+            ExpiresUtc = DateTimeOffset.UtcNow.AddHours(8),
+        };
+
+        await HttpContext.SignInAsync(AuthSchemes.Cookie, principal, props);
+
+        Nav.NavigateTo(string.IsNullOrEmpty(ReturnUrl) ? "/" : ReturnUrl, forceLoad: true);
+    }
+
+    private sealed class InputModel
+    {
+        [Required]
+        public string Username { get; set; } = "";
+
+        [Required]
+        public string Password { get; set; } = "";
+
+        public bool RememberMe { get; set; }
+    }
+}

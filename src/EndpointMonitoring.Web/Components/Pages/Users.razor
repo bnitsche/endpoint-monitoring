@@ -1,0 +1,152 @@
+@page "/users"
+@attribute [Authorize(Policy = "AdminOnly")]
+@using EndpointMonitoring.Web.Components.Dialogs
+@inject UserAuthService UserAuth
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Users – Endpoint Monitoring</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Users</MudText>
+
+<MudButton StartIcon="@Icons.Material.Filled.PersonAdd" Variant="Variant.Filled" Color="Color.Primary"
+           Class="mb-4" OnClick="OpenCreateDialog">Add User</MudButton>
+
+<MudTable Items="_users" Hover="true" Elevation="2" Loading="_loading">
+    <HeaderContent>
+        <MudTh>Username</MudTh>
+        <MudTh>Display Name</MudTh>
+        <MudTh>Role</MudTh>
+        <MudTh>Type</MudTh>
+        <MudTh>Enabled</MudTh>
+        <MudTh>Created</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Username">@context.Username</MudTd>
+        <MudTd DataLabel="Display Name">@(context.DisplayName ?? "–")</MudTd>
+        <MudTd DataLabel="Role">
+            <MudChip T="string" Size="Size.Small"
+                     Color="@(context.Role == AppRoles.Admin ? Color.Primary : Color.Default)">@context.Role</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Type">
+            @if (context.IsExternal)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info">SSO</MudChip>
+            }
+            else
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Local</MudChip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Enabled">
+            <MudSwitch Value="context.IsEnabled" Color="Color.Success"
+                       ValueChanged="(bool v) => SetEnabledAsync(context, v)" />
+        </MudTd>
+        <MudTd DataLabel="Created">@context.CreatedAt.ToLocalTime().ToString("g")</MudTd>
+        <MudTd DataLabel="Actions">
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                           OnClick="() => OpenEditDialog(context)" />
+            <MudIconButton Icon="@Icons.Material.Filled.Password" Size="Size.Small"
+                           Disabled="context.IsExternal"
+                           OnClick="() => OpenResetPasswordDialog(context)" />
+            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                           OnClick="() => DeleteAsync(context)" />
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No users found.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private bool _loading = true;
+    private List<User> _users = [];
+
+    private static readonly DialogOptions _dialogOptions = new()
+    {
+        MaxWidth = MaxWidth.Small,
+        FullWidth = true,
+        CloseOnEscapeKey = true
+    };
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _users = await UserAuth.ListAsync();
+        _loading = false;
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var parameters = new DialogParameters<UserDialog> { { x => x.Model, new UserDialog.UserEditModel() } };
+        var dialog = await DialogService.ShowAsync<UserDialog>("Add User", parameters, _dialogOptions);
+        if (await dialog.Result is { Canceled: false })
+            await LoadAsync();
+    }
+
+    private async Task OpenEditDialog(User user)
+    {
+        var model = new UserDialog.UserEditModel
+        {
+            Id = user.Id,
+            Username = user.Username,
+            Role = user.Role,
+            Email = user.Email,
+            DisplayName = user.DisplayName,
+            IsExternal = user.IsExternal
+        };
+        var parameters = new DialogParameters<UserDialog> { { x => x.Model, model } };
+        var dialog = await DialogService.ShowAsync<UserDialog>("Edit User", parameters, _dialogOptions);
+        if (await dialog.Result is { Canceled: false })
+            await LoadAsync();
+    }
+
+    private async Task OpenResetPasswordDialog(User user)
+    {
+        var parameters = new DialogParameters<ResetPasswordDialog>
+        {
+            { x => x.UserId, user.Id },
+            { x => x.Username, user.Username }
+        };
+        var dialog = await DialogService.ShowAsync<ResetPasswordDialog>("Reset Password", parameters, _dialogOptions);
+        await dialog.Result;
+    }
+
+    private async Task SetEnabledAsync(User user, bool value)
+    {
+        try
+        {
+            await UserAuth.SetEnabledAsync(user.Id, value);
+            await LoadAsync();
+        }
+        catch (AuthOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task DeleteAsync(User user)
+    {
+        var msgBoxParams = new DialogParameters<MudMessageBox>
+        {
+            { x => x.Message, $"Delete user '{user.Username}'?" }
+        };
+        var msgBox = await DialogService.ShowAsync<MudMessageBox>("Delete User", msgBoxParams);
+        var result = await msgBox.Result;
+        if (result is null || result.Canceled) return;
+
+        try
+        {
+            await UserAuth.DeleteAsync(user.Id);
+            Snackbar.Add("User deleted.", Severity.Info);
+            await LoadAsync();
+        }
+        catch (AuthOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

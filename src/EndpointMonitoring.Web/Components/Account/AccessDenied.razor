@@ -1,0 +1,14 @@
+@page "/Account/AccessDenied"
+@layout AccountLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+
+<PageTitle>Access denied – Endpoint Monitoring</PageTitle>
+
+<MudAlert Severity="Severity.Warning" Class="mb-4">
+    <MudText Typo="Typo.h6">Access denied</MudText>
+    <MudText Typo="Typo.body2" Class="mt-1">You do not have permission to view this page.</MudText>
+</MudAlert>
+
+<MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+           StartIcon="@Icons.Material.Filled.Home">Back to Dashboard</MudButton>

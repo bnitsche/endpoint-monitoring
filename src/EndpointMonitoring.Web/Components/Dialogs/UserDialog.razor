@@ -1,0 +1,95 @@
+@using EndpointMonitoring.Web.Auth
+@inject UserAuthService UserAuth
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(Model.Id == 0 ? "Add User" : "Edit User")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+
+            <MudTextField @bind-Value="Model.Username" Label="Username" Required="true" Class="mb-3"
+                          Disabled="Model.Id != 0"
+                          RequiredError="Username is required." />
+
+            @if (Model.Id == 0)
+            {
+                <MudTextField @bind-Value="Model.Password" Label="Password" Required="true" Class="mb-3"
+                              InputType="InputType.Password"
+                              Validation="@(new Func<string, string?>(ValidatePassword))"
+                              RequiredError="Password is required." />
+            }
+
+            <MudTextField @bind-Value="Model.DisplayName" Label="Display Name" Class="mb-3" />
+            <MudTextField @bind-Value="Model.Email" Label="Email" Class="mb-3" InputType="InputType.Email" />
+
+            <MudSelect T="string" @bind-Value="Model.Role" Label="Role" Required="true"
+                       AnchorOrigin="Origin.BottomLeft" RequiredError="Role is required.">
+                <MudSelectItem Value="@AppRoles.Admin">Admin</MudSelectItem>
+                <MudSelectItem Value="@AppRoles.Viewer">Viewer</MudSelectItem>
+            </MudSelect>
+
+            @if (Model.IsExternal)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
+                    This is an SSO user. The role is overwritten from the identity provider on next sign-in.
+                </MudAlert>
+            }
+
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public UserEditModel Model { get; set; } = new();
+
+    private MudForm _form = null!;
+    private bool _isValid;
+
+    private static string? ValidatePassword(string? value) =>
+        string.IsNullOrEmpty(value) || value.Length >= 8 ? null : "Password must be at least 8 characters.";
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid) return;
+
+        try
+        {
+            if (Model.Id == 0)
+                await UserAuth.CreateAsync(Model.Username, Model.Password, Model.Role, Model.Email, Model.DisplayName);
+            else
+                await UserAuth.UpdateAsync(Model.Id, Model.Role, Model.Email, Model.DisplayName);
+        }
+        catch (AuthOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            return;
+        }
+
+        Snackbar.Add("User saved.", Severity.Success);
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    public class UserEditModel
+    {
+        public int Id { get; set; }
+        public string Username { get; set; } = "";
+        public string Password { get; set; } = "";
+        public string Role { get; set; } = AppRoles.Viewer;
+        public string? Email { get; set; }
+        public string? DisplayName { get; set; }
+        public bool IsExternal { get; set; }
+    }
+}

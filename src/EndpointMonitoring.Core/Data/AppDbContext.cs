@@ -7,6 +7,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 {
     public DbSet<MonitoredEndpoint> Endpoints => Set<MonitoredEndpoint>();
     public DbSet<MonitoringResult> Results => Set<MonitoringResult>();
+    public DbSet<User> Users => Set<User>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -26,6 +27,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.HasKey(x => x.Id);
             e.HasIndex(x => new { x.EndpointId, x.CheckedAt });
+        });
+
+        modelBuilder.Entity<User>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Username).IsRequired().HasMaxLength(256);
+            e.HasIndex(x => x.Username).IsUnique();
+            e.Property(x => x.Role).IsRequired().HasMaxLength(50);
         });
     }
 }
