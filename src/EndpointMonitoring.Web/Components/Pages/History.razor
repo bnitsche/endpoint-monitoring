@@ -9,11 +9,11 @@
 
 <MudGrid Class="mb-4" Spacing="2">
     <MudItem xs="12" sm="4">
-        <MudSelect @bind-Value="_selectedEndpointId" Label="Endpoint" AnchorOrigin="Origin.BottomLeft"
+        <MudSelect T="int?" @bind-Value="_selectedEndpointId" Label="Endpoint" AnchorOrigin="Origin.BottomLeft"
                    Clearable="true" ClearIcon="@Icons.Material.Filled.Clear">
             @foreach (var ep in _endpoints)
             {
-                <MudSelectItem Value="ep.Id">@ep.Name</MudSelectItem>
+                <MudSelectItem T="int?" Value="(int?)ep.Id">@ep.Name</MudSelectItem>
             }
         </MudSelect>
     </MudItem>

@@ -8,6 +8,8 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = Host.CreateApplicationBuilder(args);
 
+builder.Services.AddWindowsService(options => options.ServiceName = "Endpoint Monitoring Service");
+
 builder.AddServiceDefaults();
 
 var dbPath = builder.Configuration["DatabasePath"]
