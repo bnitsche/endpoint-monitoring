@@ -9,7 +9,7 @@ var monitoringService = builder.AddProject<Projects.EndpointMonitoring_Monitorin
 
 builder.AddProject<Projects.EndpointMonitoring_Web>("webfrontend")
     .WithExternalHttpEndpoints()
-    .WithHttpHealthCheck("/health")
+    .WithHttpHealthCheck("/health", endpointName: "http")
     .WithEnvironment("DatabasePath", dbPath)
     .WaitFor(monitoringService);
 

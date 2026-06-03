@@ -17,10 +17,17 @@
             }
         </MudSelect>
     </MudItem>
-    <MudItem xs="12" sm="3">
+    <MudItem xs="12" sm="2">
+        <MudSelect T="bool?" @bind-Value="_statusFilter" Label="Status" AnchorOrigin="Origin.BottomLeft"
+                   Clearable="true" ClearIcon="@Icons.Material.Filled.Clear">
+            <MudSelectItem T="bool?" Value="true">OK</MudSelectItem>
+            <MudSelectItem T="bool?" Value="false">FAIL</MudSelectItem>
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="2">
         <MudDatePicker @bind-Date="_from" Label="From" />
     </MudItem>
-    <MudItem xs="12" sm="3">
+    <MudItem xs="12" sm="2">
         <MudDatePicker @bind-Date="_to" Label="To" />
     </MudItem>
     <MudItem xs="12" sm="2" Class="d-flex align-end">
@@ -29,7 +36,7 @@
     </MudItem>
 </MudGrid>
 
-<MudTable Items="_results" Hover="true" Dense="true" Elevation="2" Loading="_loading">
+<MudTable @ref="_table" Items="_results" Hover="true" Dense="true" Elevation="2" Loading="_loading">
     <HeaderContent>
         <MudTh>Endpoint</MudTh>
         <MudTh>Checked At</MudTh>
@@ -65,17 +72,40 @@
         <MudText>No results found for the selected filters.</MudText>
     </NoRecordsContent>
     <PagerContent>
-        <MudTablePager PageSizeOptions="new[] {25, 50, 100}" />
+        <div class="d-flex align-center flex-wrap">
+            <MudTablePager PageSizeOptions="new[] {25, 50, 100, 250}" />
+            @if (TotalPages > 1)
+            {
+                <div style="width:90px; flex-shrink:0; margin-left:16px;">
+                    <MudSelect T="int" Value="_jumpToPage" ValueChanged="JumpToPageAsync"
+                               Label="Page" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true"
+                               AnchorOrigin="Origin.TopCenter">
+                        @for (int i = 1; i <= TotalPages; i++)
+                        {
+                            var p = i;
+                            <MudSelectItem T="int" Value="p">@p</MudSelectItem>
+                        }
+                    </MudSelect>
+                </div>
+            }
+        </div>
     </PagerContent>
 </MudTable>
 
 @code {
+    private MudTable<ResultRow>? _table;
     private bool _loading;
     private List<MonitoredEndpoint> _endpoints = [];
     private int? _selectedEndpointId;
+    private bool? _statusFilter;
     private DateTime? _from = DateTime.Today.AddDays(-7);
     private DateTime? _to = DateTime.Today.AddDays(1);
     private List<ResultRow> _results = [];
+    private int _jumpToPage = 1;
+
+    private int TotalPages => _table is { RowsPerPage: > 0 }
+        ? (int)Math.Ceiling((double)_results.Count / _table.RowsPerPage)
+        : 1;
 
     protected override async Task OnInitializedAsync()
     {
@@ -104,13 +134,22 @@
         if (_to.HasValue)
             query = query.Where(r => r.CheckedAt <= _to.Value.ToUniversalTime());
 
+        if (_statusFilter.HasValue)
+            query = query.Where(r => r.IsSuccess == _statusFilter.Value);
+
         _results = await query
             .OrderByDescending(r => r.CheckedAt)
-            .Take(500)
             .Select(r => new ResultRow(r.Endpoint.Name, r.CheckedAt, r.IsSuccess, r.ResponseTimeMs, r.StatusMessage, r.Details))
             .ToListAsync();
 
+        _jumpToPage = 1;
         _loading = false;
+    }
+
+    private void JumpToPageAsync(int page)
+    {
+        _jumpToPage = page;
+        _table?.NavigateTo(page - 1);
     }
 
     private record ResultRow(string EndpointName, DateTime CheckedAt, bool IsSuccess,
