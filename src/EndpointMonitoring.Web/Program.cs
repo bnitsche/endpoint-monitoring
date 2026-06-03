@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using EndpointMonitoring.Core;
 using EndpointMonitoring.Core.Data;
@@ -175,6 +176,17 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+
+app.UseRequestLocalization(options =>
+{
+    var cultures = CultureInfo.GetCultures(CultureTypes.AllCultures)
+        .Select(c => c.Name)
+        .Where(n => !string.IsNullOrEmpty(n))
+        .ToArray();
+    options.SetDefaultCulture("en-US");
+    options.AddSupportedCultures(cultures);
+    options.AddSupportedUICultures(cultures);
+});
 
 app.UseAuthentication();
 app.UseAuthorization();
