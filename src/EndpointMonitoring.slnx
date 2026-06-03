@@ -1,7 +1,11 @@
 <Solution>
-  <Project Path="EndpointMonitoring.MonitoringService/EndpointMonitoring.MonitoringService.csproj" />
-  <Project Path="EndpointMonitoring.Web/EndpointMonitoring.Web.csproj" />
+  <Folder Name="/SolutionItems/">
+    <File Path="../DEPLOYMENT.md" />
+    <File Path="../README.md" />
+  </Folder>
   <Project Path="EndpointMonitoring.AppHost/EndpointMonitoring.AppHost.csproj" />
   <Project Path="EndpointMonitoring.Core/EndpointMonitoring.Core.csproj" />
+  <Project Path="EndpointMonitoring.MonitoringService/EndpointMonitoring.MonitoringService.csproj" />
   <Project Path="EndpointMonitoring.ServiceDefaults/EndpointMonitoring.ServiceDefaults.csproj" />
+  <Project Path="EndpointMonitoring.Web/EndpointMonitoring.Web.csproj" />
 </Solution>
