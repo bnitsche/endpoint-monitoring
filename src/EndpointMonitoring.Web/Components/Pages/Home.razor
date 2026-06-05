@@ -3,11 +3,11 @@
 @using EndpointMonitoring.Core.Models
 @using EndpointMonitoring.Web.Services
 @using Microsoft.EntityFrameworkCore
+@using System.Globalization
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject ISnackbar Snackbar
 @inject IMonitoringUpdateNotifier UpdateNotifier
 @implements IDisposable
-@using System.Globalization
 
 <PageTitle>Dashboard – Endpoint Monitoring</PageTitle>
 
@@ -46,10 +46,19 @@ else
         </MudItem>
     </MudGrid>
 
-    <MudTable Items="_statusRows" Hover="true" Dense="true" Elevation="2">
+    <MudTable Items="_statusRows" Hover="true" Dense="true" Elevation="2" RowClassFunc="GetRowClass">
         <ToolBarContent>
             <MudText Typo="Typo.h6">Endpoint Status</MudText>
             <MudSpacer />
+            @if (_lastSignalAt.HasValue)
+            {
+                <MudTooltip Text="Last real-time update received from monitoring service">
+                    <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Sensors"
+                             Color="Color.Success" Variant="Variant.Outlined" Class="mr-2">
+                        @_lastSignalAt.Value.ToString("G", _culture)
+                    </MudChip>
+                </MudTooltip>
+            }
             <MudIconButton Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" />
         </ToolBarContent>
         <HeaderContent>
@@ -105,17 +114,35 @@ else
     </MudTable>
 }
 
+<style>
+    @@keyframes rowFlash {
+        0%   { background-color: rgba(255, 193, 7, 0.45); }
+        35%  { background-color: rgba(255, 193, 7, 0.05); }
+        60%  { background-color: rgba(255, 193, 7, 0.45); }
+        100% { background-color: transparent; }
+    }
+
+    tr.row-flash > td {
+        animation: rowFlash 1s ease-out forwards;
+    }
+</style>
+
 @code {
     private bool _loading = true;
     private int _total, _healthy, _failing, _noData;
     private List<StatusRow> _statusRows = [];
     private CultureInfo _culture = CultureInfo.CurrentCulture;
+    private HashSet<int> _highlightedRows = [];
+    private DateTime? _lastSignalAt;
 
     private string FmtDate(DateTime? dt) => dt?.ToLocalTime().ToString("G", _culture) ?? "–";
 
+    private string GetRowClass(StatusRow row, int _) =>
+        _highlightedRows.Contains(row.EndpointId) ? "row-flash" : string.Empty;
+
     protected override async Task OnInitializedAsync()
     {
-        _culture = CultureInfo.CurrentCulture;   // capture client culture while in the correct request context
+        _culture = CultureInfo.CurrentCulture;
         UpdateNotifier.OnEndpointChecked += OnEndpointChecked;
         await LoadAsync();
     }
@@ -123,7 +150,18 @@ else
     public void Dispose() => UpdateNotifier.OnEndpointChecked -= OnEndpointChecked;
 
     private void OnEndpointChecked(int endpointId) =>
-        _ = InvokeAsync(async () => { await RefreshRowAsync(endpointId); StateHasChanged(); });
+        _ = InvokeAsync(async () =>
+        {
+            _lastSignalAt = DateTime.Now;
+            await RefreshRowAsync(endpointId);
+            _highlightedRows.Add(endpointId);
+            StateHasChanged();
+
+            await Task.Delay(1000);
+
+            _highlightedRows.Remove(endpointId);
+            StateHasChanged();
+        });
 
     private async Task RefreshRowAsync(int endpointId)
     {
