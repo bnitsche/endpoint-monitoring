@@ -1,9 +1,13 @@
 @page "/"
 @using EndpointMonitoring.Core.Data
 @using EndpointMonitoring.Core.Models
+@using EndpointMonitoring.Web.Services
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject ISnackbar Snackbar
+@inject IMonitoringUpdateNotifier UpdateNotifier
+@implements IDisposable
+@using System.Globalization
 
 <PageTitle>Dashboard – Endpoint Monitoring</PageTitle>
 
@@ -53,6 +57,7 @@ else
             <MudTh>Provider</MudTh>
             <MudTh>Status</MudTh>
             <MudTh>Last Check</MudTh>
+            <MudTh>Last Error</MudTh>
             <MudTh>Response (ms)</MudTh>
             <MudTh>Message</MudTh>
             <MudTh></MudTh>
@@ -67,20 +72,25 @@ else
                 {
                     <MudChip T="string" Color="Color.Default" Size="Size.Small">No data</MudChip>
                 }
-                else if (context.IsSuccess == true)
+                else if (context.IsSuccess == true && !context.HasUnacknowledgedAlert)
                 {
                     <MudChip T="string" Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.CheckCircle">OK</MudChip>
+                }
+                else if (context.IsSuccess == true && context.HasUnacknowledgedAlert)
+                {
+                    <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.WarningAmber">Recovered</MudChip>
                 }
                 else
                 {
                     <MudChip T="string" Color="Color.Error" Size="Size.Small" Icon="@Icons.Material.Filled.Error">FAIL</MudChip>
                 }
             </MudTd>
-            <MudTd>@(context.CheckedAt?.ToLocalTime().ToString("g") ?? "–")</MudTd>
+            <MudTd>@FmtDate(context.CheckedAt)</MudTd>
+            <MudTd>@FmtDate(context.LastFailureAt)</MudTd>
             <MudTd>@(context.ResponseTimeMs?.ToString() ?? "–")</MudTd>
             <MudTd>@(context.StatusMessage ?? "–")</MudTd>
             <MudTd>
-                @if (context.AlertSentAt.HasValue)
+                @if (context.HasUnacknowledgedAlert)
                 {
                     <AuthorizeView Roles="@AppRoles.Admin" Context="authCtx">
                         <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning"
@@ -99,8 +109,62 @@ else
     private bool _loading = true;
     private int _total, _healthy, _failing, _noData;
     private List<StatusRow> _statusRows = [];
+    private CultureInfo _culture = CultureInfo.CurrentCulture;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    private string FmtDate(DateTime? dt) => dt?.ToLocalTime().ToString("G", _culture) ?? "–";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _culture = CultureInfo.CurrentCulture;   // capture client culture while in the correct request context
+        UpdateNotifier.OnEndpointChecked += OnEndpointChecked;
+        await LoadAsync();
+    }
+
+    public void Dispose() => UpdateNotifier.OnEndpointChecked -= OnEndpointChecked;
+
+    private void OnEndpointChecked(int endpointId) =>
+        _ = InvokeAsync(async () => { await RefreshRowAsync(endpointId); StateHasChanged(); });
+
+    private async Task RefreshRowAsync(int endpointId)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var endpoint = await db.Endpoints
+            .Where(e => e.Id == endpointId && e.IsEnabled)
+            .FirstOrDefaultAsync();
+
+        if (endpoint is null)
+        {
+            _statusRows.RemoveAll(r => r.EndpointId == endpointId);
+        }
+        else
+        {
+            var result = await db.Results
+                .Where(r => r.EndpointId == endpointId)
+                .OrderByDescending(r => r.CheckedAt)
+                .FirstOrDefaultAsync();
+
+            var lastFailureAt = await db.Results
+                .Where(r => r.EndpointId == endpointId && !r.IsSuccess)
+                .MaxAsync(r => (DateTime?)r.CheckedAt);
+
+            var updated = new StatusRow(endpoint.Id, endpoint.Name, endpoint.ProviderType,
+                                        result?.IsSuccess, result?.CheckedAt,
+                                        result?.ResponseTimeMs, result?.StatusMessage,
+                                        endpoint.AlertSentAt, lastFailureAt);
+
+            var idx = _statusRows.FindIndex(r => r.EndpointId == endpointId);
+            if (idx >= 0)
+                _statusRows[idx] = updated;
+            else
+                _statusRows.Add(updated);
+        }
+
+        _total = _statusRows.Count;
+        _healthy = _statusRows.Count(r => r.IsSuccess == true && !r.HasUnacknowledgedAlert);
+        _failing = _statusRows.Count(r => r.IsSuccess == false);
+        _noData = _statusRows.Count(r => r.IsSuccess == null);
+    }
 
     private async Task LoadAsync()
     {
@@ -114,21 +178,30 @@ else
             .OrderBy(e => e.Name)
             .ToListAsync();
 
+        var endpointIds = endpoints.Select(e => e.Id).ToList();
+
         var latestResults = await db.Results
-            .Where(r => endpoints.Select(e => e.Id).Contains(r.EndpointId))
+            .Where(r => endpointIds.Contains(r.EndpointId))
             .GroupBy(r => r.EndpointId)
             .Select(g => g.OrderByDescending(r => r.CheckedAt).First())
+            .ToListAsync();
+
+        var lastFailureTimes = await db.Results
+            .Where(r => endpointIds.Contains(r.EndpointId) && !r.IsSuccess)
+            .GroupBy(r => r.EndpointId)
+            .Select(g => new { EndpointId = g.Key, At = g.Max(r => r.CheckedAt) })
             .ToListAsync();
 
         _statusRows = endpoints.Select(e =>
         {
             var result = latestResults.FirstOrDefault(r => r.EndpointId == e.Id);
+            var lastFailureAt = lastFailureTimes.FirstOrDefault(x => x.EndpointId == e.Id)?.At;
             return new StatusRow(e.Id, e.Name, e.ProviderType, result?.IsSuccess, result?.CheckedAt,
-                                 result?.ResponseTimeMs, result?.StatusMessage, e.AlertSentAt);
+                                 result?.ResponseTimeMs, result?.StatusMessage, e.AlertSentAt, lastFailureAt);
         }).ToList();
 
         _total = _statusRows.Count;
-        _healthy = _statusRows.Count(r => r.IsSuccess == true);
+        _healthy = _statusRows.Count(r => r.IsSuccess == true && !r.HasUnacknowledgedAlert);
         _failing = _statusRows.Count(r => r.IsSuccess == false);
         _noData = _statusRows.Count(r => r.IsSuccess == null);
 
@@ -142,14 +215,15 @@ else
         if (endpoint is null) return;
         endpoint.AlertSentAt = null;
         await db.SaveChangesAsync();
-        Snackbar.Add("Alert acknowledged. A new notification will be sent if the failure continues.", Severity.Info);
+        Snackbar.Add("Alert acknowledged. A new notification will be sent on the next failure.", Severity.Info);
         await LoadAsync();
     }
 
     private record StatusRow(int EndpointId, string Name, string ProviderType, bool? IsSuccess,
                               DateTime? CheckedAt, int? ResponseTimeMs, string? StatusMessage,
-                              DateTime? AlertSentAt)
+                              DateTime? AlertSentAt, DateTime? LastFailureAt)
     {
         public bool HasResult => IsSuccess.HasValue;
+        public bool HasUnacknowledgedAlert => AlertSentAt.HasValue;
     }
 }

@@ -6,14 +6,22 @@ namespace EndpointMonitoring.Web.Auth;
 /// </summary>
 public sealed class OidcOptions
 {
+    /// <summary>Configuration section name.</summary>
     public const string SectionName = "Oidc";
 
+    /// <summary>When <see langword="false"/>, OIDC login is hidden and the OIDC middleware is not registered.</summary>
     public bool Enabled { get; set; }
 
+    /// <summary>Issuer URL of the OpenID Connect provider.</summary>
     public string Authority { get; set; } = string.Empty;
+
+    /// <summary>OAuth 2.0 client ID registered with the provider.</summary>
     public string ClientId { get; set; } = string.Empty;
+
+    /// <summary>OAuth 2.0 client secret.</summary>
     public string ClientSecret { get; set; } = string.Empty;
 
+    /// <summary>Scopes requested during the authorization flow.</summary>
     public string[] Scopes { get; set; } = ["openid", "profile", "email"];
 
     /// <summary>

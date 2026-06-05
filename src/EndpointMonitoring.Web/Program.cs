@@ -9,6 +9,7 @@ using EndpointMonitoring.Core.Providers.Ping;
 using EndpointMonitoring.Core.Notifications;
 using EndpointMonitoring.Web.Auth;
 using EndpointMonitoring.Web.Components;
+using EndpointMonitoring.Web.Hubs;
 using EndpointMonitoring.Web.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -140,12 +141,8 @@ builder.Services.AddRazorComponents()
         options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(5);
     });
 
-builder.Services.AddSignalR(options =>
-{
-    // Give the client more time to respond before the server drops the connection.
-    options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
-    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
-});
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IMonitoringUpdateNotifier, MonitoringUpdateNotifier>();
 
 var app = builder.Build();
 
@@ -198,6 +195,7 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.MapDefaultEndpoints();
+app.MapHub<MonitoringHub>("/hubs/monitoring").AllowAnonymous();
 
 // ---- Sign-in / sign-out endpoints ------------------------------------------------------
 // SignInAsync cannot run inside an interactive circuit, so local sign-in happens in the

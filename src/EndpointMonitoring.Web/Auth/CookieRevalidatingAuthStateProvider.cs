@@ -15,8 +15,10 @@ public sealed class CookieRevalidatingAuthStateProvider(
     IDbContextFactory<AppDbContext> dbFactory)
     : RevalidatingServerAuthenticationStateProvider(loggerFactory)
 {
+    /// <inheritdoc/>
     protected override TimeSpan RevalidationInterval => TimeSpan.FromMinutes(5);
 
+    /// <inheritdoc/>
     protected override async Task<bool> ValidateAuthenticationStateAsync(
         AuthenticationState authenticationState, CancellationToken cancellationToken)
     {

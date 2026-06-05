@@ -32,6 +32,7 @@ public static class AuthBootstrapper
     private const string CreateIndexSql =
         """CREATE UNIQUE INDEX IF NOT EXISTS "IX_Users_Username" ON "Users" ("Username");""";
 
+    /// <summary>Creates the Users table if missing, applies any absent columns, and seeds the default admin when the table is empty.</summary>
     public static async Task EnsureUsersTableAndSeedAsync(
         IDbContextFactory<AppDbContext> dbFactory,
         IPasswordHasher<User> passwordHasher,

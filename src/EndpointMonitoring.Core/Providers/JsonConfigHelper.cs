@@ -17,7 +17,7 @@ internal static class JsonConfigHelper
     /// without ever throwing – the debugger will never pause here.
     /// </summary>
     [DebuggerNonUserCode]
-    internal static bool TryDeserialize<T>(string? json, out T? result)
+    internal static bool TryDeserialize<T>(string? json, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out T? result)
     {
         result = default;
         if (string.IsNullOrWhiteSpace(json))

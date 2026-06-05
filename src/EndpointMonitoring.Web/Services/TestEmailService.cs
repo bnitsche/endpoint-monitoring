@@ -6,10 +6,12 @@ using MimeKit.Text;
 
 namespace EndpointMonitoring.Web.Services;
 
+/// <summary>Sends a single test email to verify that the SMTP configuration is correct.</summary>
 public sealed class TestEmailService(
     SmtpSettings settings,
     ILogger<TestEmailService> logger)
 {
+    /// <summary>Sends a test email to <paramref name="recipientEmail"/>. Throws if SMTP is not configured.</summary>
     public async Task SendTestEmailAsync(string recipientEmail, CancellationToken cancellationToken = default)
     {
         if (!settings.IsConfigured)
@@ -39,7 +41,7 @@ public sealed class TestEmailService(
         await client.ConnectAsync(settings.Host, settings.Port, socketOptions, cancellationToken);
 
         if (!string.IsNullOrEmpty(settings.Username))
-            await client.AuthenticateAsync(settings.Username, settings.Password, cancellationToken);
+            await client.AuthenticateAsync(settings.Username, settings.Password ?? string.Empty, cancellationToken);
 
         await client.SendAsync(message, cancellationToken);
         await client.DisconnectAsync(quit: true, cancellationToken);

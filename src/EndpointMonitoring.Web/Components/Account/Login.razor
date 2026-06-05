@@ -25,24 +25,24 @@
         <label class="login-label" for="username">Username</label>
         <div class="login-input-wrap">
             <MudIcon Icon="@Icons.Material.Outlined.Person" Size="Size.Small" Class="login-input-icon" />
-            <InputText id="username" @bind-Value="Input.Username" class="login-input"
+            <InputText id="username" @bind-Value="Input!.Username" class="login-input"
                        autocomplete="username" placeholder="Enter your username" />
         </div>
-        <ValidationMessage For="() => Input.Username" class="login-validation" />
+        <ValidationMessage For="() => Input!.Username" class="login-validation" />
     </div>
 
     <div class="login-field">
         <label class="login-label" for="password">Password</label>
         <div class="login-input-wrap">
             <MudIcon Icon="@Icons.Material.Outlined.Lock" Size="Size.Small" Class="login-input-icon" />
-            <InputText id="password" type="password" @bind-Value="Input.Password" class="login-input"
+            <InputText id="password" type="password" @bind-Value="Input!.Password" class="login-input"
                        autocomplete="current-password" placeholder="Enter your password" />
         </div>
-        <ValidationMessage For="() => Input.Password" class="login-validation" />
+        <ValidationMessage For="() => Input!.Password" class="login-validation" />
     </div>
 
     <label class="login-remember">
-        <InputCheckbox @bind-Value="Input.RememberMe" class="login-checkbox" />
+        <InputCheckbox @bind-Value="Input!.RememberMe" class="login-checkbox" />
         <span>Remember me</span>
     </label>
 
@@ -118,7 +118,9 @@
     private HttpContext HttpContext { get; set; } = default!;
 
     [SupplyParameterFromForm]
-    private InputModel Input { get; set; } = new();
+    private InputModel? Input { get; set; }
+
+    protected override void OnInitialized() => Input ??= new();
 
     [SupplyParameterFromQuery]
     private string? ReturnUrl { get; set; }
@@ -127,7 +129,7 @@
 
     private async Task LoginUser()
     {
-        var user = await UserAuth.ValidateCredentialsAsync(Input.Username, Input.Password);
+        var user = await UserAuth.ValidateCredentialsAsync(Input?.Username ?? "", Input?.Password ?? "");
         if (user is null)
         {
             _error = "Invalid username or password.";
@@ -137,7 +139,7 @@
         var principal = UserAuthService.BuildPrincipal(user, AuthSchemes.Cookie);
         var props = new AuthenticationProperties
         {
-            IsPersistent = Input.RememberMe,
+            IsPersistent = Input?.RememberMe ?? false,
             ExpiresUtc = DateTimeOffset.UtcNow.AddHours(8),
         };
 

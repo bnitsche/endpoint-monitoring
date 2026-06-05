@@ -13,16 +13,22 @@ public class FritzBoxMonitoringProvider : IMonitoringProvider
 {
     private readonly IHttpClientFactory _httpClientFactory;
 
+    /// <summary>Initialises the provider with the shared HTTP client factory.</summary>
     public FritzBoxMonitoringProvider(IHttpClientFactory httpClientFactory)
     {
         _httpClientFactory = httpClientFactory;
     }
 
+    /// <inheritdoc/>
     public string ProviderType => "fritzbox";
+    /// <inheritdoc/>
     public string DisplayName => "Fritz!Box Internet";
+    /// <inheritdoc/>
     public string Description => "Checks internet connectivity status of a Fritz!Box via UPnP/IGD (TR-064).";
+    /// <inheritdoc/>
     public string ConfigTemplate => """{"host":"fritz.box","port":49000,"timeoutSeconds":10}""";
 
+    /// <inheritdoc/>
     public IReadOnlyList<ProviderConfigField> ConfigFields =>
     [
         new() { Key = "host",           Label = "Fritz!Box Host",    FieldType = ProviderConfigFieldType.Text,   DefaultValue = "fritz.box", Required = true,  HelperText = "Hostname or IP of your Fritz!Box (default: fritz.box)" },
@@ -30,6 +36,7 @@ public class FritzBoxMonitoringProvider : IMonitoringProvider
         new() { Key = "timeoutSeconds", Label = "Timeout (seconds)", FieldType = ProviderConfigFieldType.Number, DefaultValue = "10",        Required = false }
     ];
 
+    /// <inheritdoc/>
     public async Task<MonitoringCheckResult> CheckAsync(string providerConfig, CancellationToken cancellationToken = default)
     {
         if (!JsonConfigHelper.TryDeserialize<FritzBoxConfig>(providerConfig, out var cfg))

@@ -7,10 +7,12 @@ using MimeKit.Text;
 
 namespace EndpointMonitoring.MonitoringService.Notifications;
 
+/// <summary>Sends failure alert emails via SMTP using the configured <see cref="SmtpSettings"/>.</summary>
 public sealed class EmailNotificationService(
     SmtpSettings settings,
     ILogger<EmailNotificationService> logger)
 {
+    /// <summary>Sends an alert email for the given failed endpoint to all subscribed recipients.</summary>
     public async Task SendAlertAsync(
         MonitoredEndpoint endpoint,
         MonitoringResult result,
@@ -43,7 +45,7 @@ public sealed class EmailNotificationService(
             await client.ConnectAsync(settings.Host, settings.Port, socketOptions, cancellationToken);
 
             if (!string.IsNullOrEmpty(settings.Username))
-                await client.AuthenticateAsync(settings.Username, settings.Password, cancellationToken);
+                await client.AuthenticateAsync(settings.Username, settings.Password ?? string.Empty, cancellationToken);
 
             await client.SendAsync(message, cancellationToken);
             await client.DisconnectAsync(quit: true, cancellationToken);

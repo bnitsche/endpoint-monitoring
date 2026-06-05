@@ -6,6 +6,7 @@ using EndpointMonitoring.Core.Providers.Ping;
 using EndpointMonitoring.MonitoringService;
 using EndpointMonitoring.Core.Notifications;
 using EndpointMonitoring.MonitoringService.Notifications;
+using EndpointMonitoring.MonitoringService.SignalR;
 using Microsoft.EntityFrameworkCore;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -31,6 +32,8 @@ builder.Services.AddHttpClient("monitoring")
         ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
     });
 
+builder.Services.AddSingleton<MonitoringHubClient>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<MonitoringHubClient>());
 builder.Services.AddHostedService<EndpointMonitoringWorker>();
 
 var smtpSettings = builder.Configuration

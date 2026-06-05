@@ -2,35 +2,42 @@ using EndpointMonitoring.Core.Data;
 using EndpointMonitoring.Core.Models;
 using EndpointMonitoring.Core.Providers;
 using EndpointMonitoring.MonitoringService.Notifications;
+using EndpointMonitoring.MonitoringService.SignalR;
 using Microsoft.EntityFrameworkCore;
 
 namespace EndpointMonitoring.MonitoringService;
 
+/// <summary>Background service that runs endpoint checks on their configured schedules and sends alert emails on failure.</summary>
 public class EndpointMonitoringWorker : BackgroundService
 {
     private readonly IDbContextFactory<AppDbContext> _dbFactory;
     private readonly MonitoringProviderRegistry _registry;
     private readonly ILogger<EndpointMonitoringWorker> _logger;
     private readonly EmailNotificationService _emailNotificationService;
+    private readonly MonitoringHubClient _hubClient;
     private readonly string _websiteUrl;
 
     // Tracks the next scheduled check time per endpoint id
     private readonly Dictionary<int, DateTimeOffset> _nextCheck = [];
 
+    /// <summary>Initialises the worker with its required dependencies.</summary>
     public EndpointMonitoringWorker(
         IDbContextFactory<AppDbContext> dbFactory,
         MonitoringProviderRegistry registry,
         ILogger<EndpointMonitoringWorker> logger,
         EmailNotificationService emailNotificationService,
+        MonitoringHubClient hubClient,
         IConfiguration configuration)
     {
         _dbFactory = dbFactory;
         _registry = registry;
         _logger = logger;
         _emailNotificationService = emailNotificationService;
+        _hubClient = hubClient;
         _websiteUrl = configuration["WebsiteUrl"] ?? string.Empty;
     }
 
+    /// <inheritdoc/>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Endpoint monitoring worker started.");
@@ -134,12 +141,14 @@ public class EndpointMonitoringWorker : BackgroundService
             }
             else if (result.IsSuccess && trackedEndpoint.AlertSentAt is not null)
             {
-                trackedEndpoint.AlertSentAt = null;
-                _logger.LogInformation("Endpoint '{Name}' recovered — alert state cleared.", endpoint.Name);
+                // Alert stays set until manually acknowledged on the dashboard,
+                // so operators see the "Recovered – unacknowledged" state.
+                _logger.LogInformation("Endpoint '{Name}' recovered — awaiting acknowledgement.", endpoint.Name);
             }
         }
 
         await db.SaveChangesAsync(cancellationToken);
+        await _hubClient.NotifyCheckCompletedAsync(endpoint.Id);
 
         _logger.LogInformation(
             "Endpoint '{Name}': {Status} ({ResponseTimeMs}ms) – {Message}",

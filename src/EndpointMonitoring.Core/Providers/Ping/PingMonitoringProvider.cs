@@ -4,19 +4,26 @@ using EndpointMonitoring.Core.Providers;
 
 namespace EndpointMonitoring.Core.Providers.Ping;
 
+/// <summary>Checks host reachability by sending an ICMP ping.</summary>
 public class PingMonitoringProvider : IMonitoringProvider
 {
+    /// <inheritdoc/>
     public string ProviderType => "ping";
+    /// <inheritdoc/>
     public string DisplayName => "Ping (ICMP)";
+    /// <inheritdoc/>
     public string Description => "Sends an ICMP ping to a host and checks reachability.";
+    /// <inheritdoc/>
     public string ConfigTemplate => """{"host":"192.168.1.1","timeoutMs":3000}""";
 
+    /// <inheritdoc/>
     public IReadOnlyList<ProviderConfigField> ConfigFields =>
     [
         new() { Key = "host",      Label = "Host / IP Address", FieldType = ProviderConfigFieldType.Text,   DefaultValue = "192.168.1.1", Required = true,  HelperText = "Hostname or IP address to ping" },
         new() { Key = "timeoutMs", Label = "Timeout (ms)",      FieldType = ProviderConfigFieldType.Number, DefaultValue = "3000",        Required = false, HelperText = "Ping timeout in milliseconds (default: 3000)" }
     ];
 
+    /// <inheritdoc/>
     public async Task<MonitoringCheckResult> CheckAsync(string providerConfig, CancellationToken cancellationToken = default)
     {
         if (!JsonConfigHelper.TryDeserialize<PingConfig>(providerConfig, out var cfg))

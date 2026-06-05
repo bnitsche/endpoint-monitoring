@@ -3,12 +3,19 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EndpointMonitoring.Core.Data;
 
+/// <summary>EF Core database context for the endpoint monitoring application.</summary>
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
+    /// <summary>Monitored endpoint definitions.</summary>
     public DbSet<MonitoredEndpoint> Endpoints => Set<MonitoredEndpoint>();
+
+    /// <summary>Historical check results.</summary>
     public DbSet<MonitoringResult> Results => Set<MonitoringResult>();
+
+    /// <summary>Application users (local and external).</summary>
     public DbSet<User> Users => Set<User>();
 
+    /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<MonitoredEndpoint>(e =>

@@ -47,7 +47,7 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd>@context.EndpointName</MudTd>
-        <MudTd>@context.CheckedAt.ToLocalTime().ToString("g")</MudTd>
+        <MudTd>@context.CheckedAt.ToLocalTime().ToString("G")</MudTd>
         <MudTd>
             @if (context.IsSuccess)
             {

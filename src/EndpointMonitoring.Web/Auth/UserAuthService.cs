@@ -64,18 +64,21 @@ public sealed class UserAuthService(
 
     // ---- Admin user management ------------------------------------------------------------
 
+    /// <summary>Returns all users ordered by username.</summary>
     public async Task<List<User>> ListAsync()
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.Users.OrderBy(u => u.Username).ToListAsync();
     }
 
+    /// <summary>Returns the user with the given <paramref name="id"/>, or <see langword="null"/> if not found.</summary>
     public async Task<User?> FindAsync(int id)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.Users.FindAsync(id);
     }
 
+    /// <summary>Creates a new local user. Throws <see cref="AuthOperationException"/> if the username is already taken.</summary>
     public async Task CreateAsync(string username, string password, string role, string? email, string? displayName, bool sendNotification = false)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -99,6 +102,7 @@ public sealed class UserAuthService(
         await db.SaveChangesAsync();
     }
 
+    /// <summary>Updates role, contact details, and notification preference for an existing user.</summary>
     public async Task UpdateAsync(int id, string role, string? email, string? displayName, bool sendNotification = false)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -115,6 +119,7 @@ public sealed class UserAuthService(
         await db.SaveChangesAsync();
     }
 
+    /// <summary>Enables or disables the user. Throws if this would remove the last enabled admin.</summary>
     public async Task SetEnabledAsync(int id, bool enabled)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -128,6 +133,7 @@ public sealed class UserAuthService(
         await db.SaveChangesAsync();
     }
 
+    /// <summary>Replaces the password hash for a local user. Throws for external (OIDC) accounts.</summary>
     public async Task ResetPasswordAsync(int id, string newPassword)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -141,6 +147,7 @@ public sealed class UserAuthService(
         await db.SaveChangesAsync();
     }
 
+    /// <summary>Permanently deletes a user. Throws if this would remove the last enabled admin.</summary>
     public async Task DeleteAsync(int id)
     {
         await using var db = await dbFactory.CreateDbContextAsync();

@@ -3,20 +3,27 @@ using EndpointMonitoring.Core.Providers;
 
 namespace EndpointMonitoring.Core.Providers.Http;
 
+/// <summary>Checks that an HTTP/HTTPS URL returns the expected status code.</summary>
 public class HttpMonitoringProvider : IMonitoringProvider
 {
     private readonly IHttpClientFactory _httpClientFactory;
 
+    /// <summary>Initialises the provider with the shared HTTP client factory.</summary>
     public HttpMonitoringProvider(IHttpClientFactory httpClientFactory)
     {
         _httpClientFactory = httpClientFactory;
     }
 
+    /// <inheritdoc/>
     public string ProviderType => "http";
+    /// <inheritdoc/>
     public string DisplayName => "HTTP Endpoint";
+    /// <inheritdoc/>
     public string Description => "Checks that an HTTP/HTTPS URL returns a successful status code.";
+    /// <inheritdoc/>
     public string ConfigTemplate => """{"url":"https://example.com","expectedStatusCode":200,"timeoutSeconds":10}""";
 
+    /// <inheritdoc/>
     public IReadOnlyList<ProviderConfigField> ConfigFields =>
     [
         new() { Key = "url",                Label = "URL",                   FieldType = ProviderConfigFieldType.Url,    DefaultValue = "https://",    Required = true,  HelperText = "Full URL to check, e.g. https://example.com" },
@@ -24,6 +31,7 @@ public class HttpMonitoringProvider : IMonitoringProvider
         new() { Key = "timeoutSeconds",     Label = "Timeout (seconds)",     FieldType = ProviderConfigFieldType.Number, DefaultValue = "10",          Required = false }
     ];
 
+    /// <inheritdoc/>
     public async Task<MonitoringCheckResult> CheckAsync(string providerConfig, CancellationToken cancellationToken = default)
     {
         if (!JsonConfigHelper.TryDeserialize<HttpConfig>(providerConfig, out var cfg))
