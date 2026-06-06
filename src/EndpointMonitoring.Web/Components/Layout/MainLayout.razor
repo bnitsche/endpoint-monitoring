@@ -31,6 +31,10 @@
             <MudText Typo="Typo.h6" Color="Color.Primary">Navigation</MudText>
         </MudDrawerHeader>
         <NavMenu />
+        <MudSpacer />
+        <MudText Typo="Typo.caption" Class="px-4 pb-2 mud-text-secondary" title="@AppInfo.Version">
+            v@(_displayVersion)
+        </MudText>
     </MudDrawer>
 
     <MudMainContent>
@@ -42,4 +46,8 @@
 
 @code {
     private bool _drawerOpen = true;
+
+    // "2026.1.0606.1432+ab12cd3" → "2026.1.0606.1432 (ab12cd3)"; full string in the tooltip.
+    private static readonly string _displayVersion = AppInfo.Version.Replace("+", " (")
+        + (AppInfo.Version.Contains('+') ? ")" : "");
 }

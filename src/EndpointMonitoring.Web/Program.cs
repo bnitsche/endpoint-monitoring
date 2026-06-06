@@ -152,6 +152,8 @@ builder.Services.AddSingleton<ILoggerProvider>(sp =>
 
 var app = builder.Build();
 
+app.Logger.LogInformation("Endpoint Monitoring Web {Version} starting", AppInfo.Version);
+
 using (var scope = app.Services.CreateScope())
 {
     var sp = scope.ServiceProvider;

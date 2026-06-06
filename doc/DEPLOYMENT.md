@@ -46,6 +46,19 @@ Then copy both output folders to the server, for example:
 - `C:\inetpub\wwwroot\endpoint-monitoring\` ← contents of `publish\web`
 - `C:\Services\endpoint-monitoring\` ← contents of `publish\service`
 
+### Versioning
+
+Every Release build is stamped automatically with a CalVer version (see
+`src/Directory.Build.props`): `YYYY.R.MMdd.HHmm`, e.g. `2026.1.0606.1432`
+= release 1, built June 6 2026 at 14:32. The short git commit hash is
+appended to the informational version (`2026.1.0606.1432+ab12cd3`).
+
+- Bump `<ReleaseNumber>` in `src/Directory.Build.props` for a new release;
+  date/time and commit hash are filled in at build time.
+- The running version is shown at the bottom of the navigation drawer in
+  the Web UI and logged at startup by both the web app and the service.
+- To check a deployed binary: file properties → Details → *Product version*.
+
 ---
 
 ## 2. Deploy the Web App to IIS

@@ -1,0 +1,41 @@
+<Project>
+
+  <!--
+    Application-wide CalVer versioning: YYYY.R.MMdd.HHmm
+      YYYY = build year, R = release number (bump manually below),
+      MMdd = build date, HHmm = build time.
+    Example: 2026.1.0606.1432 = release 1, built June 6 2026 at 14:32.
+    The short git commit hash is appended to the InformationalVersion
+    (e.g. 2026.1.0606.1432+ab12cd3) for traceability.
+  -->
+  <PropertyGroup>
+    <ReleaseNumber>1</ReleaseNumber>
+  </PropertyGroup>
+
+  <!-- Release builds get the full timestamped version. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <Version>$([System.DateTime]::Now.ToString('yyyy')).$(ReleaseNumber).$([System.DateTime]::Now.ToString('MMdd')).$([System.DateTime]::Now.ToString('HHmm'))</Version>
+  </PropertyGroup>
+
+  <!-- Debug builds use a stable version so incremental builds stay fast. -->
+  <PropertyGroup Condition="'$(Configuration)' != 'Release'">
+    <Version>$([System.DateTime]::Now.ToString('yyyy')).$(ReleaseNumber).0.0</Version>
+    <InformationalVersion>$(Version)-dev</InformationalVersion>
+  </PropertyGroup>
+
+  <!-- Append the short git commit hash as +hash to the InformationalVersion (Release only). -->
+  <Target Name="SetSourceRevisionId" BeforeTargets="GetAssemblyVersion;GenerateAssemblyInfo"
+          Condition="'$(Configuration)' == 'Release'">
+    <Exec Command="git rev-parse --short HEAD"
+          WorkingDirectory="$(MSBuildThisFileDirectory)"
+          ConsoleToMSBuild="true" IgnoreExitCode="true"
+          StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_GitHash" />
+      <Output TaskParameter="ExitCode" PropertyName="_GitExitCode" />
+    </Exec>
+    <PropertyGroup Condition="'$(_GitExitCode)' == '0'">
+      <SourceRevisionId>$(_GitHash)</SourceRevisionId>
+    </PropertyGroup>
+  </Target>
+
+</Project>

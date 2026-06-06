@@ -53,6 +53,10 @@ builder.Services.AddSingleton<EmailNotificationService>();
 
 var host = builder.Build();
 
+host.Services.GetRequiredService<ILoggerFactory>()
+    .CreateLogger("Startup")
+    .LogInformation("Endpoint Monitoring Service {Version} starting", AppInfo.Version);
+
 using (var scope = host.Services.CreateScope())
 {
     var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
