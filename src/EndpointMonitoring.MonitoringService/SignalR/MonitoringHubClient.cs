@@ -1,19 +1,24 @@
+using EndpointMonitoring.Core.Logging;
 using Microsoft.AspNetCore.SignalR.Client;
 
 namespace EndpointMonitoring.MonitoringService.SignalR;
 
-/// <summary>Hosted service that maintains a SignalR connection to the web project's hub and pushes check-completed events.</summary>
+/// <summary>Hosted service that maintains a SignalR connection to the web project's hub and pushes check-completed events and log entries.</summary>
 public class MonitoringHubClient : IHostedService, IAsyncDisposable
 {
+    private const int MaxLogBatchSize = 100;
+
     private readonly string _hubUrl;
     private readonly ILogger<MonitoringHubClient> _logger;
+    private readonly LogForwardChannel _logChannel;
     private HubConnection? _connection;
     private CancellationTokenSource? _cts;
 
     /// <summary>Resolves the hub URL from Aspire service discovery or the <c>WebsiteUrl</c> config key.</summary>
-    public MonitoringHubClient(IConfiguration config, ILogger<MonitoringHubClient> logger)
+    public MonitoringHubClient(IConfiguration config, ILogger<MonitoringHubClient> logger, LogForwardChannel logChannel)
     {
         _logger = logger;
+        _logChannel = logChannel;
 
         // Under Aspire, WithReference(web) injects the web project URL as env vars.
         // The .NET config system maps  services__webfrontend__https__0  →  services:webfrontend:https:0
@@ -62,6 +67,7 @@ public class MonitoringHubClient : IHostedService, IAsyncDisposable
 
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _ = ConnectWithRetryAsync(_cts.Token);
+        _ = ForwardLogsAsync(_cts.Token);
 
         return Task.CompletedTask;
     }
@@ -115,6 +121,53 @@ public class MonitoringHubClient : IHostedService, IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to push check-completed event for endpoint {Id}.", endpointId);
+        }
+    }
+
+    // Drains the log channel and pushes entries to the hub in batches. While the connection is
+    // down the bounded channel buffers entries (dropping the oldest), so startup logs arrive once
+    // the connection is established.
+    private async Task ForwardLogsAsync(CancellationToken cancellationToken)
+    {
+        var batch = new List<LogEntry>(MaxLogBatchSize);
+
+        try
+        {
+            while (await _logChannel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                if (_connection?.State != HubConnectionState.Connected)
+                {
+                    // Not connected yet — leave entries queued and check again shortly.
+                    await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+
+                batch.Clear();
+                while (batch.Count < MaxLogBatchSize && _logChannel.Reader.TryRead(out var entry))
+                    batch.Add(entry);
+
+                if (batch.Count == 0)
+                    continue;
+
+                try
+                {
+                    await _connection.SendAsync("PublishLogs", batch.ToArray(), cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch
+                {
+                    // The batch is lost — acceptable for a live tail. Don't log here: this class's
+                    // category is excluded from the live provider, and spamming the host log on
+                    // every transient send failure helps nobody.
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Shutdown.
         }
     }
 

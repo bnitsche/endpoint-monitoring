@@ -1,5 +1,6 @@
 using EndpointMonitoring.Core;
 using EndpointMonitoring.Core.Data;
+using EndpointMonitoring.Core.Logging;
 using EndpointMonitoring.Core.Providers.FritzBox;
 using EndpointMonitoring.Core.Providers.Http;
 using EndpointMonitoring.Core.Providers.Ping;
@@ -34,6 +35,14 @@ builder.Services.AddHttpClient("monitoring")
 
 builder.Services.AddSingleton<MonitoringHubClient>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MonitoringHubClient>());
+
+// Real-time log streaming: mirror this service's logs into a bounded channel that the hub client
+// forwards to the web app. The hub client's own category is excluded to avoid feedback loops.
+builder.Services.AddSingleton<LogForwardChannel>();
+builder.Services.AddSingleton<ILoggerProvider>(sp => new LiveLogLoggerProvider(
+    LogEntry.MonitoringServiceName,
+    sp.GetRequiredService<LogForwardChannel>(),
+    "EndpointMonitoring.MonitoringService.SignalR"));
 builder.Services.AddHostedService<EndpointMonitoringWorker>();
 
 var smtpSettings = builder.Configuration

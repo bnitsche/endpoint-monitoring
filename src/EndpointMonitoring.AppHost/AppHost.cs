@@ -6,6 +6,11 @@ var dbPath = builder.Configuration["DatabasePath"]
 
 var web = builder.AddProject<Projects.EndpointMonitoring_Web>("webfrontend")
     .WithExternalHttpEndpoints()
+    // Bind the launchSettings ports (7097/5290) directly instead of running behind DCP's proxy.
+    // The proxy assigns the app a dynamic ephemeral port, which on Windows can land in a
+    // Hyper-V/WinNAT reserved range and silently fail to bind (dotnet/aspire#9634).
+    .WithEndpoint("https", e => e.IsProxied = false)
+    .WithEndpoint("http", e => e.IsProxied = false)
     .WithHttpHealthCheck("/health", endpointName: "http")
     .WithEnvironment("DatabasePath", dbPath);
 

@@ -12,6 +12,12 @@ public interface IMonitoringProvider
     /// <summary>Short description of what this provider checks.</summary>
     string Description { get; }
 
+    /// <summary>
+    /// Optional usage note shown as an info box in the endpoint dialog when this provider is selected
+    /// (e.g. prerequisites or limitations). Null if the provider has no special requirements.
+    /// </summary>
+    string? UsageNote => null;
+
     /// <summary>Structured field descriptors used to build the config form in the UI.</summary>
     IReadOnlyList<ProviderConfigField> ConfigFields { get; }
 

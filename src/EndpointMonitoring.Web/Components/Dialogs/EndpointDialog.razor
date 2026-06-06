@@ -28,6 +28,11 @@
                 }
             </MudSelect>
 
+            @if (!string.IsNullOrEmpty(_usageNote))
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">@_usageNote</MudAlert>
+            }
+
             @if (_configFields.Count > 0)
             {
                 <MudText Typo="Typo.subtitle2" Class="mb-2 mt-1">Provider Configuration</MudText>
@@ -81,6 +86,7 @@
     private bool _isValid;
     private Dictionary<string, string> _fieldValues = [];
     private IReadOnlyList<ProviderConfigField> _configFields = [];
+    private string? _usageNote;
 
     protected override void OnParametersSet()
     {
@@ -97,6 +103,7 @@
     {
         var provider = ProviderRegistry.GetByType(providerType);
         _configFields = provider?.ConfigFields ?? [];
+        _usageNote = provider?.UsageNote;
 
         _fieldValues = [];
         if (!string.IsNullOrWhiteSpace(existingJson) && existingJson != "{}")

@@ -52,6 +52,14 @@ Sends ICMP echo requests to a host and reports reachability and round-trip time.
 ### Fritz!Box
 Queries a Fritz!Box router via UPnP/IGD (TR-064) to monitor internet connectivity status and retrieve the current external IP address.
 
+**Requirements** — this check only works under the following circumstances:
+
+- **Local network only.** The monitoring service must run inside the Fritz!Box home network (LAN/WLAN). AVM never exposes the UPnP/TR-064 port `49000` on the WAN side, so checking a Fritz!Box remotely over the internet (e.g. via a MyFRITZ! or DynDNS hostname) is not possible by design.
+- **UPnP status information must be enabled** on the Fritz!Box: *Home Network → Network → Network Settings → "Transmit status information over UPnP"* (German UI: *Heimnetz → Netzwerk → Netzwerkeinstellungen → "Statusinformationen über UPnP übertragen"*). If disabled, the check fails with `Status: Unknown`.
+- **No network isolation** between the monitoring service and the box: when running in a Docker container, VM, or VPN segment on a different subnet, the Fritz!Box may reject the request because it only answers hosts it considers part of the home network.
+
+To monitor a remote site's connectivity instead, use the HTTP or Ping provider against a host behind that Fritz!Box.
+
 ## Web UI
 
 | Page | Access | Description |

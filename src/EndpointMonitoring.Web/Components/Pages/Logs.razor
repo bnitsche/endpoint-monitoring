@@ -1,0 +1,185 @@
+@page "/logs"
+@attribute [Authorize(Policy = "AdminOnly")]
+@using System.Globalization
+@using EndpointMonitoring.Core.Logging
+@using EndpointMonitoring.Web.Services
+@using Microsoft.Extensions.Logging
+@inject LogStreamService LogStream
+@implements IDisposable
+
+<PageTitle>Logs – Endpoint Monitoring</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Logs</MudText>
+
+<MudGrid Class="mb-4" Spacing="2">
+    <MudItem xs="6" sm="3">
+        <MudSelect T="string" @bind-Value="_sourceFilter" Label="Source" AnchorOrigin="Origin.BottomLeft"
+                   Clearable="true" ClearIcon="@Icons.Material.Filled.Clear">
+            <MudSelectItem T="string" Value="@LogEntry.WebServiceName">@LogEntry.WebServiceName</MudSelectItem>
+            <MudSelectItem T="string" Value="@LogEntry.MonitoringServiceName">@LogEntry.MonitoringServiceName</MudSelectItem>
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudSelect T="LogLevel" @bind-Value="_minLevel" Label="Min. Level" AnchorOrigin="Origin.BottomLeft">
+            <MudSelectItem T="LogLevel" Value="LogLevel.Trace">Trace</MudSelectItem>
+            <MudSelectItem T="LogLevel" Value="LogLevel.Debug">Debug</MudSelectItem>
+            <MudSelectItem T="LogLevel" Value="LogLevel.Information">Information</MudSelectItem>
+            <MudSelectItem T="LogLevel" Value="LogLevel.Warning">Warning</MudSelectItem>
+            <MudSelectItem T="LogLevel" Value="LogLevel.Error">Error</MudSelectItem>
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="6">
+        <MudTextField T="string" @bind-Value="_search" Label="Search" Immediate="true"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Clearable="true" />
+    </MudItem>
+</MudGrid>
+
+<MudTable Items="FilteredEntries" Hover="true" Dense="true" Elevation="2"
+          FixedHeader="true" Height="62vh" Virtualize="true">
+    <ToolBarContent>
+        <MudText Typo="Typo.h6">Live Log</MudText>
+        <MudSpacer />
+        @if (_lastSignalAt.HasValue)
+        {
+            <MudTooltip Text="Last log entry received">
+                <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Sensors"
+                         Color="@(_paused ? Color.Default : Color.Success)" Variant="Variant.Outlined"
+                         Class="mr-2 d-none d-sm-inline-flex">
+                    @_lastSignalAt.Value.ToString("G", _culture)
+                </MudChip>
+            </MudTooltip>
+        }
+        <MudTooltip Text="@(_paused ? "Resume live updates" : "Pause live updates")">
+            <MudIconButton Icon="@(_paused ? Icons.Material.Filled.PlayArrow : Icons.Material.Filled.Pause)"
+                           Color="@(_paused ? Color.Warning : Color.Default)" OnClick="TogglePause" />
+        </MudTooltip>
+        <MudTooltip Text="Clear view">
+            <MudIconButton Icon="@Icons.Material.Filled.DeleteSweep" OnClick="ClearView" />
+        </MudTooltip>
+    </ToolBarContent>
+    <HeaderContent>
+        <MudTh Style="width: 170px;">Time</MudTh>
+        <MudTh Style="width: 110px;">Level</MudTh>
+        <MudTh Style="width: 140px;">Source</MudTh>
+        <MudTh Style="width: 200px;">Category</MudTh>
+        <MudTh>Message</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Time" Style="white-space: nowrap;">@context.Timestamp.ToLocalTime().ToString("G", _culture)</MudTd>
+        <MudTd DataLabel="Level">
+            <MudChip T="string" Size="Size.Small" Color="@LevelColor(context.Level)" Variant="Variant.Filled">
+                @LevelLabel(context.Level)
+            </MudChip>
+        </MudTd>
+        <MudTd DataLabel="Source" HideSmall="true">
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@context.ServiceName</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Category" HideSmall="true">
+            <MudTooltip Text="@context.Category">
+                <span>@ShortCategory(context.Category)</span>
+            </MudTooltip>
+        </MudTd>
+        <MudTd DataLabel="Message" Style="word-break: break-word;">
+            @context.Message
+            @if (!string.IsNullOrEmpty(context.Exception))
+            {
+                <pre class="log-exception">@context.Exception</pre>
+            }
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText Typo="Typo.body2" Class="pa-4">No log entries match the current filter.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+<style>
+    pre.log-exception {
+        margin: 4px 0 0;
+        padding: 4px 8px;
+        max-height: 160px;
+        overflow: auto;
+        font-size: 0.75rem;
+        background-color: rgba(244, 67, 54, 0.08);
+        border-left: 3px solid rgba(244, 67, 54, 0.6);
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+</style>
+
+@code {
+    private List<LogEntry> _entries = [];   // newest first
+    private string? _sourceFilter;
+    private LogLevel _minLevel = LogLevel.Information;
+    private string? _search;
+    private bool _paused;
+    private CultureInfo _culture = CultureInfo.CurrentCulture;
+    private DateTime? _lastSignalAt;
+
+    private IEnumerable<LogEntry> FilteredEntries => _entries.Where(e =>
+        e.Level >= _minLevel
+        && (_sourceFilter is null || e.ServiceName == _sourceFilter)
+        && (string.IsNullOrWhiteSpace(_search)
+            || e.Message.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || e.Category.Contains(_search, StringComparison.OrdinalIgnoreCase)));
+
+    protected override void OnInitialized()
+    {
+        _culture = CultureInfo.CurrentCulture;
+        LogStream.OnLogReceived += OnLogReceived;
+        Resync();
+    }
+
+    public void Dispose() => LogStream.OnLogReceived -= OnLogReceived;
+
+    private void OnLogReceived(LogEntry entry)
+    {
+        if (_paused)
+            return;
+
+        _ = InvokeAsync(() =>
+        {
+            _lastSignalAt = DateTime.Now;
+            _entries.Insert(0, entry);
+            if (_entries.Count > LogStreamService.Capacity)
+                _entries.RemoveAt(_entries.Count - 1);
+            StateHasChanged();
+        });
+    }
+
+    // Reloads the view from the buffer, e.g. after resuming from pause.
+    private void Resync() => _entries = [.. LogStream.GetSnapshot().Reverse()];
+
+    private void TogglePause()
+    {
+        _paused = !_paused;
+        if (!_paused)
+            Resync();   // catch up on entries that arrived while paused
+    }
+
+    private void ClearView() => _entries = [];
+
+    private static Color LevelColor(LogLevel level) => level switch
+    {
+        LogLevel.Warning => Color.Warning,
+        LogLevel.Error or LogLevel.Critical => Color.Error,
+        LogLevel.Information => Color.Info,
+        _ => Color.Default
+    };
+
+    private static string LevelLabel(LogLevel level) => level switch
+    {
+        LogLevel.Trace => "TRC",
+        LogLevel.Debug => "DBG",
+        LogLevel.Information => "INF",
+        LogLevel.Warning => "WRN",
+        LogLevel.Error => "ERR",
+        LogLevel.Critical => "CRT",
+        _ => level.ToString()
+    };
+
+    private static string ShortCategory(string category)
+    {
+        var idx = category.LastIndexOf('.');
+        return idx >= 0 && idx < category.Length - 1 ? category[(idx + 1)..] : category;
+    }
+}

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Claims;
 using EndpointMonitoring.Core;
 using EndpointMonitoring.Core.Data;
+using EndpointMonitoring.Core.Logging;
 using EndpointMonitoring.Core.Models;
 using EndpointMonitoring.Core.Providers.FritzBox;
 using EndpointMonitoring.Core.Providers.Http;
@@ -143,6 +144,11 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IMonitoringUpdateNotifier, MonitoringUpdateNotifier>();
+
+// Real-time log streaming: buffer web + monitoring-service logs and push them to the Logs page.
+builder.Services.AddSingleton<LogStreamService>();
+builder.Services.AddSingleton<ILoggerProvider>(sp =>
+    new LiveLogLoggerProvider(LogEntry.WebServiceName, sp.GetRequiredService<LogStreamService>()));
 
 var app = builder.Build();
 

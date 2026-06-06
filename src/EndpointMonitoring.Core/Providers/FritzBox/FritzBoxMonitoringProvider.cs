@@ -26,6 +26,12 @@ public class FritzBoxMonitoringProvider : IMonitoringProvider
     /// <inheritdoc/>
     public string Description => "Checks internet connectivity status of a Fritz!Box via UPnP/IGD (TR-064).";
     /// <inheritdoc/>
+    public string? UsageNote =>
+        "This check only works from inside the Fritz!Box home network (LAN/WLAN) — " +
+        "the UPnP port 49000 is never reachable from the internet. " +
+        "Additionally, \"Transmit status information over UPnP\" must be enabled on the Fritz!Box " +
+        "under Home Network → Network → Network Settings.";
+    /// <inheritdoc/>
     public string ConfigTemplate => """{"host":"fritz.box","port":49000,"timeoutSeconds":10}""";
 
     /// <inheritdoc/>
@@ -60,40 +66,36 @@ public class FritzBoxMonitoringProvider : IMonitoringProvider
 
         var url = $"http://{host}:{port}/igdupnp/control/WANIPConn1";
 
-        const string soapBody = """
-            <?xml version="1.0" encoding="utf-8"?>
-            <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"
-                        s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
-              <s:Body>
-                <u:GetStatusInfo xmlns:u="urn:schemas-upnp-org:service:WANIPConnection:1"/>
-              </s:Body>
-            </s:Envelope>
-            """;
-
         var client = _httpClientFactory.CreateClient("monitoring");
         client.Timeout = TimeSpan.FromSeconds(cfg.TimeoutSeconds > 0 ? cfg.TimeoutSeconds : 10);
 
         var sw = Stopwatch.StartNew();
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, url)
-            {
-                Content = new StringContent(soapBody, Encoding.UTF8, "text/xml")
-            };
-            request.Headers.Add("SOAPAction", "\"urn:schemas-upnp-org:service:WANIPConnection:1#GetStatusInfo\"");
-
-            using var response = await client.SendAsync(request, cancellationToken);
+            var statusDoc = await SendSoapRequestAsync(client, url, "GetStatusInfo", cancellationToken);
             sw.Stop();
 
-            var xml = await response.Content.ReadAsStringAsync(cancellationToken);
-            var doc = XDocument.Parse(xml);
-
-            XNamespace ns = "urn:schemas-upnp-org:service:WANIPConnection:1";
-            var connectionStatus = doc.Descendants(ns + "NewConnectionStatus").FirstOrDefault()?.Value;
-            var externalIp = doc.Descendants(ns + "NewExternalIPAddress").FirstOrDefault()?.Value;
+            // The Fritz!Box returns the result elements without a namespace prefix
+            // and without a default namespace, so match by local name only.
+            var connectionStatus = GetElementValue(statusDoc, "NewConnectionStatus");
 
             if (connectionStatus?.Equals("Connected", StringComparison.OrdinalIgnoreCase) == true)
-                return MonitoringCheckResult.Success((int)sw.ElapsedMilliseconds, $"Connected, IP: {externalIp}");
+            {
+                // The external IP comes from a separate action; treat it as optional extra info.
+                string? externalIp = null;
+                try
+                {
+                    var ipDoc = await SendSoapRequestAsync(client, url, "GetExternalIPAddress", cancellationToken);
+                    externalIp = GetElementValue(ipDoc, "NewExternalIPAddress");
+                }
+                catch
+                {
+                    // Connectivity is already confirmed; ignore failures of the optional IP lookup.
+                }
+
+                var details = string.IsNullOrEmpty(externalIp) ? "Connected" : $"Connected, IP: {externalIp}";
+                return MonitoringCheckResult.Success((int)sw.ElapsedMilliseconds, details);
+            }
 
             return MonitoringCheckResult.Failure($"Status: {connectionStatus ?? "Unknown"}");
         }
@@ -108,6 +110,34 @@ public class FritzBoxMonitoringProvider : IMonitoringProvider
             return MonitoringCheckResult.Failure("Error", ex.Message);
         }
     }
+
+    /// <summary>Sends a UPnP/IGD SOAP action to the WANIPConnection service and returns the parsed response.</summary>
+    private static async Task<XDocument> SendSoapRequestAsync(HttpClient client, string url, string action, CancellationToken cancellationToken)
+    {
+        var soapBody = $"""
+            <?xml version="1.0" encoding="utf-8"?>
+            <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"
+                        s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+              <s:Body>
+                <u:{action} xmlns:u="urn:schemas-upnp-org:service:WANIPConnection:1"/>
+              </s:Body>
+            </s:Envelope>
+            """;
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = new StringContent(soapBody, Encoding.UTF8, "text/xml")
+        };
+        request.Headers.Add("SOAPAction", $"\"urn:schemas-upnp-org:service:WANIPConnection:1#{action}\"");
+
+        using var response = await client.SendAsync(request, cancellationToken);
+        var xml = await response.Content.ReadAsStringAsync(cancellationToken);
+        return XDocument.Parse(xml);
+    }
+
+    /// <summary>Finds an element by local name, ignoring namespaces (the Fritz!Box omits them on result elements).</summary>
+    private static string? GetElementValue(XDocument doc, string localName) =>
+        doc.Descendants().FirstOrDefault(e => e.Name.LocalName == localName)?.Value;
 
     private sealed record FritzBoxConfig(
         [property: System.Text.Json.Serialization.JsonPropertyName("host")] string Host = "fritz.box",
