@@ -1,0 +1,290 @@
+@page "/system"
+@using EndpointMonitoring.Core.Data
+@using EndpointMonitoring.Web.Components.Shared
+@using EndpointMonitoring.Web.Services
+@using EndpointMonitoring.Web.Services.Topology
+@using Microsoft.EntityFrameworkCore
+@using System.Globalization
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject ConnectedClientRegistry Clients
+@inject MonitoringServiceLinkRegistry Link
+@inject IMonitoringUpdateNotifier UpdateNotifier
+@implements IDisposable
+
+<PageTitle>System – Endpoint Monitoring</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">System</MudText>
+
+@if (_model is null)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+}
+else
+{
+    <MudStack Row="true" Spacing="2" Class="mb-3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                 Icon="@Icons.Material.Filled.Sensors"
+                 Color="@(Link.IsConnected ? Color.Success : Color.Error)">
+            Monitoring service @(Link.IsConnected ? "connected" : "disconnected")
+        </MudChip>
+        @if (Link.LastSignalAt.HasValue)
+        {
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default"
+                     Icon="@Icons.Material.Filled.Schedule">
+                Last signal @RelTime(Link.LastSignalAt)
+            </MudChip>
+        }
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default"
+                 Icon="@Icons.Material.Filled.Devices">
+            @(_frontendCount) frontend@(_frontendCount == 1 ? "" : "s") connected
+        </MudChip>
+    </MudStack>
+
+    <MudPaper Class="pa-2 pa-sm-4" Elevation="2">
+        <TopologyGraph Model="_model" />
+    </MudPaper>
+}
+
+@code {
+    private TopologyModel? _model;
+    private int _frontendCount;
+    private readonly HashSet<string> _pulsingEdges = [];
+    private readonly CancellationTokenSource _cts = new();
+    private PeriodicTimer? _timer;
+    private CultureInfo _culture = CultureInfo.CurrentCulture;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _culture = CultureInfo.CurrentCulture;
+        UpdateNotifier.OnEndpointChecked += OnEndpointChecked;
+        Clients.OnChanged += OnRegistryChanged;
+        Link.OnChanged += OnRegistryChanged;
+
+        await BuildModelAsync();
+
+        _ = RunRefreshTimerAsync();
+    }
+
+    public void Dispose()
+    {
+        UpdateNotifier.OnEndpointChecked -= OnEndpointChecked;
+        Clients.OnChanged -= OnRegistryChanged;
+        Link.OnChanged -= OnRegistryChanged;
+        _cts.Cancel();
+        _timer?.Dispose();
+        _cts.Dispose();
+    }
+
+    /// <summary>Keeps relative timestamps (last signal, connected-since) fresh while no events arrive.</summary>
+    private async Task RunRefreshTimerAsync()
+    {
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+        try
+        {
+            while (await _timer.WaitForNextTickAsync(_cts.Token))
+            {
+                await InvokeAsync(async () =>
+                {
+                    await BuildModelAsync();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Page disposed.
+        }
+    }
+
+    private void OnRegistryChanged() =>
+        _ = InvokeAsync(async () =>
+        {
+            await BuildModelAsync();
+            StateHasChanged();
+        });
+
+    private void OnEndpointChecked(int endpointId) =>
+        _ = InvokeAsync(async () =>
+        {
+            var edgeId = $"mon-ep-{endpointId}";
+            _pulsingEdges.Add(edgeId);
+            await BuildModelAsync();
+            StateHasChanged();
+
+            await Task.Delay(1200);
+
+            _pulsingEdges.Remove(edgeId);
+            var edge = _model?.Edges.FirstOrDefault(e => e.Id == edgeId);
+            if (edge is not null)
+                edge.Pulsing = false;
+            StateHasChanged();
+        });
+
+    private async Task BuildModelAsync()
+    {
+        var model = new TopologyModel();
+
+        // --- Column 0: connected frontends (browser circuits) ---
+        var clients = Clients.Snapshot()
+            .OrderBy(c => c.ConnectedAt)
+            .ToList();
+        _frontendCount = clients.Count;
+
+        foreach (var client in clients)
+        {
+            var id = $"client-{client.CircuitId}";
+            model.Nodes.Add(new TopoNode
+            {
+                Id = id,
+                Kind = NodeKind.Frontend,
+                Column = 0,
+                Label = client.UserName,
+                SubLabel = $"{client.RemoteIp} · since {client.ConnectedAt.ToString("t", _culture)}",
+                Tooltip = $"{client.UserName} ({client.RemoteIp}), connected since {client.ConnectedAt.ToString("G", _culture)}",
+                Chip = client.Role,
+                Status = client.State == ClientConnectionState.Reconnecting
+                    ? NodeStatus.Warning
+                    : client.IsAuthenticated ? NodeStatus.Success : NodeStatus.Neutral,
+                IconSvg = Icons.Material.Filled.Computer
+            });
+            model.Edges.Add(new TopoEdge
+            {
+                Id = $"edge-{id}",
+                FromId = id,
+                ToId = "webapp",
+                State = client.State == ClientConnectionState.Reconnecting ? EdgeState.Down : EdgeState.Normal
+            });
+        }
+
+        // --- Column 1: web app + database ---
+        model.Nodes.Add(new TopoNode
+        {
+            Id = "webapp",
+            Kind = NodeKind.WebApp,
+            Column = 1,
+            Label = "Web App",
+            SubLabel = AppInfo.Version,
+            Tooltip = $"EndpointMonitoring.Web {AppInfo.Version}",
+            Status = NodeStatus.Success,
+            IconSvg = Icons.Material.Filled.Web
+        });
+        model.Nodes.Add(new TopoNode
+        {
+            Id = "db",
+            Kind = NodeKind.Database,
+            Column = 1,
+            Label = "Database",
+            SubLabel = "SQLite",
+            Tooltip = "Shared SQLite database",
+            Status = NodeStatus.Neutral,
+            IconSvg = Icons.Material.Filled.Storage
+        });
+        model.Edges.Add(new TopoEdge { Id = "edge-webapp-db", FromId = "webapp", ToId = "db" });
+
+        // --- Column 2: monitoring service (hub link state) ---
+        var linkUp = Link.IsConnected;
+        model.Nodes.Add(new TopoNode
+        {
+            Id = "monitoring",
+            Kind = NodeKind.MonitoringService,
+            Column = 2,
+            Label = "Monitoring Service",
+            SubLabel = linkUp ? $"connected {RelTime(Link.ConnectedAt)}" : "disconnected",
+            Tooltip = linkUp
+                ? $"Monitoring service connected since {Link.ConnectedAt?.ToString("G", _culture)}"
+                : "Monitoring service is not connected to the SignalR hub",
+            Status = linkUp ? NodeStatus.Success : NodeStatus.Error,
+            IconSvg = Icons.Material.Filled.MonitorHeart
+        });
+        model.Edges.Add(new TopoEdge
+        {
+            Id = "edge-webapp-monitoring",
+            FromId = "webapp",
+            ToId = "monitoring",
+            State = linkUp ? EdgeState.Up : EdgeState.Down,
+            Label = Link.LastSignalAt.HasValue ? $"last signal {RelTime(Link.LastSignalAt)}" : "no signal yet"
+        });
+        model.Edges.Add(new TopoEdge { Id = "edge-db-monitoring", FromId = "db", ToId = "monitoring" });
+
+        // --- Column 3: monitored endpoints with latest result ---
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var endpoints = await db.Endpoints
+            .Where(e => e.IsEnabled)
+            .OrderBy(e => e.ProviderType)
+            .ThenBy(e => e.Name)
+            .ToListAsync();
+
+        var endpointIds = endpoints.Select(e => e.Id).ToList();
+
+        var latestResults = await db.Results
+            .Where(r => endpointIds.Contains(r.EndpointId))
+            .GroupBy(r => r.EndpointId)
+            .Select(g => g.OrderByDescending(r => r.CheckedAt).First())
+            .ToListAsync();
+
+        foreach (var endpoint in endpoints)
+        {
+            var result = latestResults.FirstOrDefault(r => r.EndpointId == endpoint.Id);
+            var id = $"ep-{endpoint.Id}";
+
+            model.Nodes.Add(new TopoNode
+            {
+                Id = id,
+                Kind = NodeKind.Endpoint,
+                Column = 3,
+                Label = endpoint.Name,
+                SubLabel = result is null
+                    ? "no data"
+                    : result.IsSuccess
+                        ? $"{result.ResponseTimeMs} ms · {RelTime(result.CheckedAt.ToLocalTime())}"
+                        : result.StatusMessage ?? "failing",
+                Tooltip = result is null
+                    ? $"{endpoint.Name} ({endpoint.ProviderType}) – no check result yet"
+                    : $"{endpoint.Name} ({endpoint.ProviderType}) – {(result.IsSuccess ? "OK" : "FAIL")}, " +
+                      $"last check {result.CheckedAt.ToLocalTime().ToString("G", _culture)}" +
+                      (result.StatusMessage is null ? string.Empty : $": {result.StatusMessage}"),
+                Status = result is null
+                    ? NodeStatus.Warning
+                    : result.IsSuccess ? NodeStatus.Success : NodeStatus.Error,
+                Badge = endpoint.AlertSentAt.HasValue,
+                Chip = endpoint.ProviderType,
+                IconSvg = ProviderIcon(endpoint.ProviderType)
+            });
+
+            var edgeId = $"mon-ep-{endpoint.Id}";
+            model.Edges.Add(new TopoEdge
+            {
+                Id = edgeId,
+                FromId = "monitoring",
+                ToId = id,
+                State = result is null ? EdgeState.Normal : result.IsSuccess ? EdgeState.Up : EdgeState.Down,
+                Label = result?.ResponseTimeMs is { } ms ? $"{ms} ms · every {endpoint.IntervalSeconds}s" : $"every {endpoint.IntervalSeconds}s",
+                Pulsing = _pulsingEdges.Contains(edgeId)
+            });
+        }
+
+        TopologyLayout.Apply(model);
+        _model = model;
+    }
+
+    private static string ProviderIcon(string providerType) => providerType switch
+    {
+        "http" => Icons.Material.Filled.Language,
+        "ping" => Icons.Material.Filled.NetworkPing,
+        "fritzbox" => Icons.Material.Filled.Router,
+        _ => Icons.Material.Filled.Lan
+    };
+
+    private string RelTime(DateTime? at)
+    {
+        if (!at.HasValue)
+            return "never";
+
+        var age = DateTime.Now - at.Value;
+        return age.TotalSeconds < 10 ? "just now"
+            : age.TotalSeconds < 60 ? $"{(int)age.TotalSeconds}s ago"
+            : age.TotalMinutes < 60 ? $"{(int)age.TotalMinutes} min ago"
+            : at.Value.ToString("G", _culture);
+    }
+}

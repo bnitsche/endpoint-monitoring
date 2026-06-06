@@ -1,0 +1,99 @@
+@using EndpointMonitoring.Web.Services.Topology
+
+<div class="topo-scroll">
+    <svg class="topo-svg"
+         viewBox="0 0 @TopologyLayout.Fmt(Model.Width) @TopologyLayout.Fmt(Model.Height)"
+         preserveAspectRatio="xMinYMin meet"
+         style="min-width: @(TopologyLayout.Fmt(Model.Width))px; height: @(TopologyLayout.Fmt(Model.Height))px;"
+         role="img" aria-label="System topology">
+
+        @* Edges first so nodes paint on top. *@
+        @foreach (var edge in Model.Edges)
+        {
+            var from = Model.Node(edge.FromId);
+            var to = Model.Node(edge.ToId);
+            if (from is null || to is null)
+                continue;
+
+            var d = TopologyLayout.EdgePath(from, to);
+
+            <path d="@d" pathLength="100" class="topo-edge @EdgeClass(edge)" />
+
+            @if (edge.Pulsing)
+            {
+                <path d="@d" pathLength="100" class="topo-edge-pulse" />
+            }
+
+            @if (edge.Label is not null)
+            {
+                var (mx, my) = TopologyLayout.EdgeMid(from, to);
+                @SvgText("topo-edge-label", mx, my, edge.Label)
+            }
+        }
+
+        @foreach (var node in Model.Nodes)
+        {
+            <g class="topo-node @StatusClass(node.Status)"
+               transform="translate(@TopologyLayout.Fmt(node.X), @TopologyLayout.Fmt(node.Y))">
+                <title>@(node.Tooltip ?? node.Label)</title>
+                <rect class="topo-rect" width="@TopologyLayout.Fmt(TopologyLayout.NodeW)" height="@TopologyLayout.Fmt(TopologyLayout.NodeH)" rx="8" />
+                <circle class="topo-status-dot" cx="14" cy="14" r="5" />
+                @if (node.IconSvg is not null)
+                {
+                    <g class="topo-icon" transform="translate(26, 17) scale(0.9)">@((MarkupString)node.IconSvg)</g>
+                }
+                @SvgText("topo-label", 54, 24, Truncate(node.Label, 18))
+                @if (node.SubLabel is not null)
+                {
+                    @SvgText("topo-sublabel", 54, 42, Truncate(node.SubLabel, 24))
+                }
+                @if (node.Chip is not null)
+                {
+                    @SvgText("topo-chip", TopologyLayout.NodeW - 10, 18, node.Chip, anchor: "end")
+                }
+                @if (node.Badge)
+                {
+                    <circle class="topo-badge" cx="@TopologyLayout.Fmt(TopologyLayout.NodeW - 12)" cy="@TopologyLayout.Fmt(TopologyLayout.NodeH - 12)" r="6">
+                        <title>Unacknowledged alert</title>
+                    </circle>
+                }
+            </g>
+        }
+    </svg>
+</div>
+
+@code {
+    /// <summary>The topology to render. Layout (X/Y, Width/Height) must already be applied.</summary>
+    [Parameter, EditorRequired]
+    public required TopologyModel Model { get; set; }
+
+    private static string EdgeClass(TopoEdge edge) => edge.State switch
+    {
+        EdgeState.Up => "up",
+        EdgeState.Down => "down",
+        _ => string.Empty
+    };
+
+    private static string StatusClass(NodeStatus status) => status switch
+    {
+        NodeStatus.Success => "success",
+        NodeStatus.Warning => "warning",
+        NodeStatus.Error => "error",
+        _ => "neutral"
+    };
+
+    private static string Truncate(string value, int max) =>
+        value.Length <= max ? value : value[..(max - 1)] + "…";
+
+    /// <summary>
+    /// Renders an SVG &lt;text&gt; element as raw markup, because Razor reserves the
+    /// <c>&lt;text&gt;</c> tag for literal text and rejects attributes on it (RZ1023).
+    /// </summary>
+    private static MarkupString SvgText(string cssClass, double x, double y, string content, string? anchor = null)
+    {
+        var anchorAttr = anchor is null ? string.Empty : $" text-anchor=\"{anchor}\"";
+        var markup = $"<text class=\"{cssClass}\" x=\"{TopologyLayout.Fmt(x)}\" y=\"{TopologyLayout.Fmt(y)}\"{anchorAttr}>"
+                     + System.Net.WebUtility.HtmlEncode(content) + "</text>";
+        return (MarkupString)markup;
+    }
+}

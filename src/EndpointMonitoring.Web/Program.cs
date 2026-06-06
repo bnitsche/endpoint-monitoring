@@ -17,6 +17,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
@@ -144,6 +145,11 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IMonitoringUpdateNotifier, MonitoringUpdateNotifier>();
+
+// System topology page: track connected browser circuits and the monitoring-service hub link.
+builder.Services.AddSingleton<ConnectedClientRegistry>();
+builder.Services.AddSingleton<MonitoringServiceLinkRegistry>();
+builder.Services.AddScoped<CircuitHandler, TrackingCircuitHandler>();
 
 // Real-time log streaming: buffer web + monitoring-service logs and push them to the Logs page.
 builder.Services.AddSingleton<LogStreamService>();

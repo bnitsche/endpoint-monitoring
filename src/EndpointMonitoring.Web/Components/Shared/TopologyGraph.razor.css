@@ -1,0 +1,93 @@
+.topo-scroll {
+    overflow-x: auto;
+    width: 100%;
+}
+
+.topo-svg {
+    display: block;
+    width: 100%;
+}
+
+/* ---- Edges ---- */
+
+.topo-edge {
+    fill: none;
+    stroke: var(--mud-palette-lines-default);
+    stroke-width: 2;
+}
+
+.topo-edge.up {
+    stroke: var(--mud-palette-success);
+}
+
+.topo-edge.down {
+    stroke: var(--mud-palette-error);
+    stroke-dasharray: 6 4;
+}
+
+.topo-edge-pulse {
+    fill: none;
+    stroke: var(--mud-palette-info);
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-dasharray: 8 92;
+    animation: topoPulse 1.1s linear forwards;
+}
+
+@keyframes topoPulse {
+    from { stroke-dashoffset: 100; }
+    to   { stroke-dashoffset: 8; }
+}
+
+/* Text elements are injected as raw markup (Razor reserves <text>), so they carry no
+   CSS-isolation scope attribute — match them via ::deep under the scoped svg. */
+.topo-svg ::deep .topo-edge-label {
+    fill: var(--mud-palette-text-secondary);
+    font-size: 11px;
+    text-anchor: middle;
+}
+
+/* ---- Nodes ---- */
+
+.topo-rect {
+    fill: var(--mud-palette-surface);
+    stroke: var(--mud-palette-lines-default);
+    stroke-width: 1.5;
+}
+
+.topo-node.success .topo-rect { stroke: var(--mud-palette-success); }
+.topo-node.error   .topo-rect { stroke: var(--mud-palette-error); }
+.topo-node.warning .topo-rect { stroke: var(--mud-palette-warning); }
+
+.topo-status-dot { fill: var(--mud-palette-text-secondary); }
+.topo-node.success .topo-status-dot { fill: var(--mud-palette-success); }
+.topo-node.error   .topo-status-dot { fill: var(--mud-palette-error); }
+.topo-node.warning .topo-status-dot { fill: var(--mud-palette-warning); }
+
+.topo-icon {
+    fill: var(--mud-palette-text-secondary);
+}
+
+.topo-svg ::deep .topo-label {
+    fill: var(--mud-palette-text-primary);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.topo-svg ::deep .topo-sublabel {
+    fill: var(--mud-palette-text-secondary);
+    font-size: 11px;
+}
+
+.topo-svg ::deep .topo-chip {
+    fill: var(--mud-palette-text-secondary);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.topo-badge {
+    fill: var(--mud-palette-warning);
+    stroke: var(--mud-palette-surface);
+    stroke-width: 1.5;
+}
