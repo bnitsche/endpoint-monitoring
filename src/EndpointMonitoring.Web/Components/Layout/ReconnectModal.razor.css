@@ -23,6 +23,7 @@
 #components-reconnect-modal {
     background-color: white;
     width: 20rem;
+    max-width: calc(100vw - 2rem);
     margin: 20vh auto;
     padding: 2rem;
     border: 0;

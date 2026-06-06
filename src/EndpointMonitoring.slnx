@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/SolutionItems/">
-    <File Path="../DEPLOYMENT.md" />
+    <File Path="../doc/DEPLOYMENT.md" />
+    <File Path="../doc/SIGNALR.md" />
     <File Path="../README.md" />
   </Folder>
   <Project Path="EndpointMonitoring.AppHost/EndpointMonitoring.AppHost.csproj" />

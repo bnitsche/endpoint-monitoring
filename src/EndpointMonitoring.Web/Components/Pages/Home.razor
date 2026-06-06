@@ -19,27 +19,27 @@
 }
 else
 {
-    <MudGrid Spacing="3" Class="mb-6">
-        <MudItem xs="12" sm="6" md="3">
-            <MudPaper Class="pa-4" Elevation="2">
+    <MudGrid Spacing="2" Class="mb-4 mb-sm-6">
+        <MudItem xs="6" sm="6" md="3">
+            <MudPaper Class="pa-2 pa-sm-4" Elevation="2">
                 <MudText Typo="Typo.overline" Color="Color.Default">Total Endpoints</MudText>
                 <MudText Typo="Typo.h4">@_total</MudText>
             </MudPaper>
         </MudItem>
-        <MudItem xs="12" sm="6" md="3">
-            <MudPaper Class="pa-4" Elevation="2">
+        <MudItem xs="6" sm="6" md="3">
+            <MudPaper Class="pa-2 pa-sm-4" Elevation="2">
                 <MudText Typo="Typo.overline" Color="Color.Success">Healthy</MudText>
                 <MudText Typo="Typo.h4" Color="Color.Success">@_healthy</MudText>
             </MudPaper>
         </MudItem>
-        <MudItem xs="12" sm="6" md="3">
-            <MudPaper Class="pa-4" Elevation="2">
+        <MudItem xs="6" sm="6" md="3">
+            <MudPaper Class="pa-2 pa-sm-4" Elevation="2">
                 <MudText Typo="Typo.overline" Color="Color.Error">Failing</MudText>
                 <MudText Typo="Typo.h4" Color="Color.Error">@_failing</MudText>
             </MudPaper>
         </MudItem>
-        <MudItem xs="12" sm="6" md="3">
-            <MudPaper Class="pa-4" Elevation="2">
+        <MudItem xs="6" sm="6" md="3">
+            <MudPaper Class="pa-2 pa-sm-4" Elevation="2">
                 <MudText Typo="Typo.overline" Color="Color.Warning">No Data</MudText>
                 <MudText Typo="Typo.h4" Color="Color.Warning">@_noData</MudText>
             </MudPaper>
@@ -54,7 +54,7 @@ else
             {
                 <MudTooltip Text="Last real-time update received from monitoring service">
                     <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Sensors"
-                             Color="Color.Success" Variant="Variant.Outlined" Class="mr-2">
+                             Color="Color.Success" Variant="Variant.Outlined" Class="mr-2 d-none d-sm-inline-flex">
                         @_lastSignalAt.Value.ToString("G", _culture)
                     </MudChip>
                 </MudTooltip>
@@ -72,11 +72,11 @@ else
             <MudTh></MudTh>
         </HeaderContent>
         <RowTemplate>
-            <MudTd>@context.Name</MudTd>
-            <MudTd>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Provider" HideSmall="true">
                 <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@context.ProviderType</MudChip>
             </MudTd>
-            <MudTd>
+            <MudTd DataLabel="Status">
                 @if (!context.HasResult)
                 {
                     <MudChip T="string" Color="Color.Default" Size="Size.Small">No data</MudChip>
@@ -94,11 +94,11 @@ else
                     <MudChip T="string" Color="Color.Error" Size="Size.Small" Icon="@Icons.Material.Filled.Error">FAIL</MudChip>
                 }
             </MudTd>
-            <MudTd>@FmtDate(context.CheckedAt)</MudTd>
-            <MudTd>@FmtDate(context.LastFailureAt)</MudTd>
-            <MudTd>@(context.ResponseTimeMs?.ToString() ?? "–")</MudTd>
-            <MudTd>@(context.StatusMessage ?? "–")</MudTd>
-            <MudTd>
+            <MudTd DataLabel="Last Check">@FmtDate(context.CheckedAt)</MudTd>
+            <MudTd DataLabel="Last Error" HideSmall="true">@FmtDate(context.LastFailureAt)</MudTd>
+            <MudTd DataLabel="Response (ms)" HideSmall="true">@(context.ResponseTimeMs?.ToString() ?? "–")</MudTd>
+            <MudTd DataLabel="Message">@(context.StatusMessage ?? "–")</MudTd>
+            <MudTd DataLabel="">
                 @if (context.HasUnacknowledgedAlert)
                 {
                     <AuthorizeView Roles="@AppRoles.Admin" Context="authCtx">

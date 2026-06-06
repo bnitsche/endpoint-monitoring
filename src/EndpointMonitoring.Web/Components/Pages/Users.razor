@@ -45,7 +45,7 @@
             <MudSwitch Value="context.IsEnabled" Color="Color.Success"
                        ValueChanged="(bool v) => SetEnabledAsync(context, v)" />
         </MudTd>
-        <MudTd DataLabel="Created">@context.CreatedAt.ToLocalTime().ToString("G")</MudTd>
+        <MudTd DataLabel="Created" HideSmall="true">@context.CreatedAt.ToLocalTime().ToString("G")</MudTd>
         <MudTd DataLabel="Actions">
             <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                            OnClick="() => OpenEditDialog(context)" />

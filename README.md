@@ -1,17 +1,22 @@
 # Endpoint Monitoring
 
-A self-hosted endpoint monitoring solution for Windows Server. Monitors HTTP/HTTPS endpoints, network hosts (ICMP), and Fritz!Box internet connectivity — with a Blazor web dashboard, email alerts, and flexible authentication.
+A self-hosted endpoint monitoring solution for Windows Server. Monitors HTTP/HTTPS endpoints, network hosts (ICMP), and Fritz!Box internet connectivity — with a real-time Blazor web dashboard (SignalR push updates), email alerts, and flexible authentication.
 
 ## Features
 
 - **Multiple monitoring providers** — HTTP/HTTPS status checks, ICMP ping, Fritz!Box UPnP/IGD
 - **Configurable check intervals** — per-endpoint polling in seconds
+- **Real-time dashboard (SignalR)** — the monitoring service pushes check results to the web app; dashboard rows update live (no manual refresh), changed rows flash briefly, and a chip shows the timestamp of the last received signal
+- **Dashboard overview** — summary cards (Total / Healthy / Failing / No Data) plus a status table with last check, last error, response time, and status message per endpoint
 - **Email alerts** — SMTP notifications on failure with deduplication (one alert per incident)
-- **Alert acknowledgment** — clears automatically on endpoint recovery
+- **Alert acknowledgment** — failed endpoints show a *Recovered* state after coming back up until an admin acknowledges the alert from the dashboard; acknowledging re-arms notifications
+- **Per-user notification opt-in** — admins control which users receive alert emails
+- **Check history** — filterable result history (endpoint, OK/FAIL status, date range) with pagination and direct page jump
 - **Role-based access** — Admin and Viewer roles
 - **Authentication** — local username/password accounts or OpenID Connect (e.g. Zitadel)
-- **Blazor Server UI** — real-time dashboard built with MudBlazor
+- **Blazor Server UI** — responsive dashboard built with MudBlazor, localized date/time formatting based on the browser culture
 - **SQLite database** — single-file, zero-maintenance persistence
+- **Observability** — optional OpenTelemetry OTLP export
 
 ## Architecture
 
@@ -19,10 +24,22 @@ The solution is split into two independently deployed components that share a si
 
 | Component | Type | Description |
 |-----------|------|-------------|
-| `EndpointMonitoring.Web` | ASP.NET Core / Blazor | Web dashboard, user management, configuration |
-| `EndpointMonitoring.MonitoringService` | .NET Worker Service | Background check runner, email alert dispatch |
+| `EndpointMonitoring.Web` | ASP.NET Core / Blazor | Web dashboard, SignalR hub, user management, configuration |
+| `EndpointMonitoring.MonitoringService` | .NET Worker Service | Background check runner, email alert dispatch, SignalR push client |
 
 Both components write to the same SQLite database file. The monitoring service runs as a Windows Service; the web app runs under IIS via the ASP.NET Core Module.
+
+### Real-Time Updates (SignalR)
+
+In addition to the shared database, the monitoring service maintains a SignalR connection to the web app:
+
+1. The web app hosts a SignalR hub at `/hubs/monitoring`.
+2. After every endpoint check, the monitoring service invokes `NotifyCheckCompleted(endpointId)` on the hub.
+3. The hub relays the event in-process to all connected Blazor circuits, which reload only the affected dashboard row.
+
+The hub URL is resolved from Aspire service discovery during development, or from the `WebsiteUrl` setting in production. The client connects with automatic reconnect plus a 30-second retry loop for the initial connection — if the web app is unreachable, monitoring continues normally and real-time push simply resumes once the connection is re-established. The dashboard falls back to manual refresh at any time.
+
+> **Note:** The hub endpoint allows anonymous access (the Windows Service has no user identity) and the client accepts self-signed certificates, so it works with internal/self-signed HTTPS setups out of the box.
 
 ## Monitoring Providers
 
@@ -34,6 +51,15 @@ Sends ICMP echo requests to a host and reports reachability and round-trip time.
 
 ### Fritz!Box
 Queries a Fritz!Box router via UPnP/IGD (TR-064) to monitor internet connectivity status and retrieve the current external IP address.
+
+## Web UI
+
+| Page | Access | Description |
+|------|--------|-------------|
+| **Dashboard** | All users | Summary cards (Total / Healthy / Failing / No Data) and live status table with last check, last error, response time, and message per endpoint. Updates in real time via SignalR — updated rows flash and a chip shows when the last signal was received. Admins acknowledge recovered alerts here. |
+| **Endpoints** | Admin | Create, edit, delete, and enable/disable monitored endpoints with provider-specific configuration and per-endpoint check interval. |
+| **History** | All users | Browse all check results, filterable by endpoint, OK/FAIL status, and date range. Paginated with configurable page size and direct page jump. |
+| **Users** | Admin | Manage local and OIDC users: create, edit, enable/disable, delete, reset passwords, toggle email notification opt-in, and send a test email per user. |
 
 ## Deployment
 
@@ -85,7 +111,15 @@ Both components call `EnsureCreated()` on startup and apply any schema migration
 C:\ProgramData\EndpointMonitoring\monitoring.db
 ```
 
-Override with the `DatabasePath` environment variable (set identically in both components).
+Override the location with the `DatabasePath` configuration value — either as an environment variable or as an optional top-level entry in `appsettings.json` (set identically in both components):
+
+```json
+{
+  "DatabasePath": "D:\\Data\\EndpointMonitoring\\monitoring.db"
+}
+```
+
+Internally this resolves to the SQLite connection string `Data Source=<DatabasePath>;Mode=ReadWriteCreate;Cache=Shared` with WAL journaling enabled.
 
 ## Configuration
 
@@ -93,6 +127,7 @@ Override with the `DatabasePath` environment variable (set identically in both c
 
 ```json
 {
+  "DatabasePath": "C:\\ProgramData\\EndpointMonitoring\\monitoring.db",
   "Auth": {
     "DefaultAdmin": {
       "Username": "admin",
@@ -125,6 +160,7 @@ Override with the `DatabasePath` environment variable (set identically in both c
 
 ```json
 {
+  "DatabasePath": "C:\\ProgramData\\EndpointMonitoring\\monitoring.db",
   "Smtp": {
     "Host": "smtp.example.com",
     "Port": 587,
@@ -138,14 +174,18 @@ Override with the `DatabasePath` environment variable (set identically in both c
 }
 ```
 
-`WebsiteUrl` is included in alert emails as a link to the dashboard.
+`DatabasePath` is optional — when omitted, the default path under `C:\ProgramData` is used (see [Database](#database)).
+
+`WebsiteUrl` serves two purposes: it is included in alert emails as a link to the dashboard, and it is the base URL the monitoring service uses to reach the SignalR hub (`<WebsiteUrl>/hubs/monitoring`) for real-time dashboard updates. If it is missing, monitoring and email alerts still work — only real-time push is disabled.
 
 ### Environment Variables
 
+All `appsettings.json` values can alternatively be supplied as environment variables (use `__` as the section separator, e.g. `Smtp__Host`). The most relevant ones:
+
 | Variable | Description |
 |----------|-------------|
-| `DatabasePath` | Absolute path to the SQLite database file. Must match in both components. |
-| `WebsiteUrl` | Dashboard URL embedded in alert emails (MonitoringService only). |
+| `DatabasePath` | Absolute path to the SQLite database file. Must match in both components. Optional — defaults to `C:\ProgramData\EndpointMonitoring\monitoring.db`. |
+| `WebsiteUrl` | Dashboard URL — embedded in alert emails and used as the SignalR hub base URL (MonitoringService only). |
 | `ASPNETCORE_ENVIRONMENT` | Set to `Development` to disable HTTPS redirect and relax other production settings. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Optional OpenTelemetry OTLP collector endpoint (e.g. `http://collector:4317`). |
 
@@ -182,6 +222,7 @@ Use the **Send Test Email** button in the admin UI to verify SMTP connectivity b
 |-------|-----------|
 | Runtime | .NET 10 |
 | Web framework | ASP.NET Core / Blazor Server |
+| Real-time push | SignalR (hub in Web, .NET client in MonitoringService) |
 | UI components | MudBlazor 9 |
 | ORM | Entity Framework Core 10 |
 | Database | SQLite (WAL mode) |
@@ -196,5 +237,7 @@ The solution includes a `.NET Aspire` AppHost project (`EndpointMonitoring.AppHo
 ```powershell
 dotnet run --project src\EndpointMonitoring.AppHost
 ```
+
+The AppHost propagates a shared `DatabasePath` to both projects and wires the monitoring service to the web app via `WithReference`, so the SignalR hub client finds the web app through service discovery — no `WebsiteUrl` needed during development. The monitoring service waits for the web app's health check before starting, ensuring the hub is reachable.
 
 Set `ASPNETCORE_ENVIRONMENT=Development` to disable HTTPS redirects and use relaxed certificate validation.

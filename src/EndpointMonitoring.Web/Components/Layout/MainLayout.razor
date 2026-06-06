@@ -13,17 +13,20 @@
         <MudSpacer />
         <AuthorizeView>
             <Authorized>
-                <MudText Typo="Typo.body2" Class="mr-3">@context.User.Identity?.Name</MudText>
+                <MudText Typo="Typo.body2" Class="mr-3 d-none d-sm-flex">@context.User.Identity?.Name</MudText>
                 <form method="post" action="/Account/Logout" style="display:inline;">
                     <AntiforgeryToken />
-                    <MudButton ButtonType="ButtonType.Submit" Color="Color.Inherit"
+                    <MudButton ButtonType="ButtonType.Submit" Color="Color.Inherit" Class="d-none d-sm-inline-flex"
                                StartIcon="@Icons.Material.Filled.Logout">Logout</MudButton>
+                    <MudIconButton ButtonType="ButtonType.Submit" Color="Color.Inherit" Class="d-sm-none"
+                                   Icon="@Icons.Material.Filled.Logout" title="Logout" />
                 </form>
             </Authorized>
         </AuthorizeView>
     </MudAppBar>
 
-    <MudDrawer @bind-Open="_drawerOpen" Elevation="2" ClipMode="DrawerClipMode.Always">
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="2" ClipMode="DrawerClipMode.Always"
+               Variant="DrawerVariant.Responsive" Breakpoint="Breakpoint.Md">
         <MudDrawerHeader>
             <MudText Typo="Typo.h6" Color="Color.Primary">Navigation</MudText>
         </MudDrawerHeader>

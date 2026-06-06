@@ -8,7 +8,7 @@ Two components are deployed independently:
 | Web UI | `EndpointMonitoring.Web` | IIS (via ASP.NET Core Module) |
 | Background monitor | `EndpointMonitoring.MonitoringService` | Windows Service |
 
-Both share a single SQLite database. The `.NET Aspire AppHost` project is for local development only and is **not deployed**.
+Both share a single SQLite database; in addition, the monitoring service pushes real-time check results to the web app's SignalR hub (see section 5). The `.NET Aspire AppHost` project is for local development only and is **not deployed**.
 
 ---
 
@@ -17,7 +17,7 @@ Both share a single SQLite database. The `.NET Aspire AppHost` project is for lo
 ### On the Windows Server
 
 1. **IIS** — enable via *Server Manager → Add Roles and Features → Web Server (IIS)*  
-   Required IIS features: Static Content, Default Document, Directory Browsing, HTTP Errors, HTTP Redirection, ASP.NET
+   Required IIS features: Static Content, Default Document, Directory Browsing, HTTP Errors, HTTP Redirection, ASP.NET, **WebSocket Protocol** (under *Web Server → Application Development* — required for Blazor Server and the SignalR real-time updates)
 
 2. **[.NET 10 Hosting Bundle](https://dotnet.microsoft.com/download/dotnet/10.0)**  
    Installs the .NET Runtime, ASP.NET Core Runtime, and the IIS ASP.NET Core Module (ANCM).  
@@ -127,7 +127,48 @@ icacls "C:\ProgramData\EndpointMonitoring" /grant "IIS AppPool\EndpointMonitorin
 
 ---
 
-## 5. Authentication Configuration
+## 5. Email Alerts & Real-Time Updates
+
+### SMTP (email alerts)
+
+Configure the `Smtp` section in `appsettings.json` in **both** deployment folders — the monitoring service sends the alert emails, the web app uses it for the *Send Test Email* feature:
+
+```json
+{
+  "Smtp": {
+    "Host": "smtp.example.com",
+    "Port": 587,
+    "UseSsl": false,
+    "Username": "",
+    "Password": "",
+    "FromAddress": "monitoring@example.com",
+    "FromName": "Endpoint Monitoring"
+  }
+}
+```
+
+Port 587 uses STARTTLS (default); for implicit SSL on port 465 set `UseSsl: true`. Username/password are optional. Leave `Host` empty to disable email alerts.
+
+### `WebsiteUrl` (monitoring service only)
+
+Set `WebsiteUrl` in the **monitoring service's** `appsettings.json` to the public URL of the web app:
+
+```json
+{
+  "WebsiteUrl": "https://monitoring.example.com"
+}
+```
+
+It is used for two things:
+
+1. **Alert emails** — included as a link back to the dashboard.
+2. **Real-time dashboard updates** — the service connects to the web app's SignalR hub at `<WebsiteUrl>/hubs/monitoring` and pushes each check result, so dashboard rows update live without a page refresh.
+
+If `WebsiteUrl` is missing, monitoring and email alerts still work — only the real-time push is disabled (the service logs a warning at startup). The hub endpoint allows anonymous access and the client accepts self-signed certificates, so internal HTTPS setups work without extra configuration. If the web app is temporarily unreachable, the service retries every 30 seconds and reconnects automatically.
+
+---
+
+## 6. Authentication Configuration
 
 ### Local users (default)
 
@@ -194,7 +235,7 @@ When OIDC is enabled, external users are automatically provisioned in the local 
 
 ---
 
-## 6. Optional: OpenTelemetry
+## 7. Optional: OpenTelemetry
 
 Both services export telemetry via OTLP if the endpoint is configured. Set the environment variable on each process:
 
@@ -206,7 +247,7 @@ Leave it unset to disable telemetry export entirely.
 
 ---
 
-## 7. Verify the Deployment
+## 8. Verify the Deployment
 
 ```powershell
 # Windows Service is running
@@ -218,6 +259,10 @@ Invoke-WebRequest http://localhost -UseBasicParsing
 
 Open `http://<server>/Account/Login` in a browser — you should see the login page.  
 Log in with the admin credentials and confirm the dashboard loads and endpoints are being monitored.
+
+**Real-time updates:** after the next check cycle, a green chip with the last-received-signal timestamp appears in the dashboard's *Endpoint Status* toolbar and updated rows flash briefly. If it never appears, check the monitoring service log for `No hub URL configured` (missing `WebsiteUrl`) or hub connection warnings, and verify the IIS **WebSocket Protocol** feature is installed.
+
+**Email alerts:** on the *Users* page, use the per-user **Send Test Email** button to verify SMTP connectivity.
 
 ---
 

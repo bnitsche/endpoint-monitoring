@@ -17,20 +17,20 @@
             }
         </MudSelect>
     </MudItem>
-    <MudItem xs="12" sm="2">
+    <MudItem xs="6" sm="2">
         <MudSelect T="bool?" @bind-Value="_statusFilter" Label="Status" AnchorOrigin="Origin.BottomLeft"
                    Clearable="true" ClearIcon="@Icons.Material.Filled.Clear">
             <MudSelectItem T="bool?" Value="true">OK</MudSelectItem>
             <MudSelectItem T="bool?" Value="false">FAIL</MudSelectItem>
         </MudSelect>
     </MudItem>
-    <MudItem xs="12" sm="2">
+    <MudItem xs="6" sm="2">
         <MudDatePicker @bind-Date="_from" Label="From" />
     </MudItem>
-    <MudItem xs="12" sm="2">
+    <MudItem xs="6" sm="2">
         <MudDatePicker @bind-Date="_to" Label="To" />
     </MudItem>
-    <MudItem xs="12" sm="2" Class="d-flex align-end">
+    <MudItem xs="6" sm="2" Class="d-flex align-end">
         <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadResultsAsync"
                    StartIcon="@Icons.Material.Filled.Search" FullWidth="true">Search</MudButton>
     </MudItem>
@@ -46,9 +46,9 @@
         <MudTh>Details</MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd>@context.EndpointName</MudTd>
-        <MudTd>@context.CheckedAt.ToLocalTime().ToString("G")</MudTd>
-        <MudTd>
+        <MudTd DataLabel="Endpoint">@context.EndpointName</MudTd>
+        <MudTd DataLabel="Checked At">@context.CheckedAt.ToLocalTime().ToString("G")</MudTd>
+        <MudTd DataLabel="Status">
             @if (context.IsSuccess)
             {
                 <MudChip T="string" Color="Color.Success" Size="Size.Small">OK</MudChip>
@@ -58,9 +58,9 @@
                 <MudChip T="string" Color="Color.Error" Size="Size.Small">FAIL</MudChip>
             }
         </MudTd>
-        <MudTd>@(context.ResponseTimeMs?.ToString() ?? "–")</MudTd>
-        <MudTd>@(context.StatusMessage ?? "–")</MudTd>
-        <MudTd>
+        <MudTd DataLabel="Response (ms)" HideSmall="true">@(context.ResponseTimeMs?.ToString() ?? "–")</MudTd>
+        <MudTd DataLabel="Message">@(context.StatusMessage ?? "–")</MudTd>
+        <MudTd DataLabel="Details" HideSmall="true">
             <MudTooltip Text="@context.Details" Placement="Placement.Left">
                 <MudText Typo="Typo.caption" Style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;">
                     @context.Details

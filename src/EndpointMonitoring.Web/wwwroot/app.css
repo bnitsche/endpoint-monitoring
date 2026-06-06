@@ -1,1 +1,40 @@
 html, body { margin: 0; padding: 0; }
+
+/* Compact layout on phones (< 600px, MudBlazor "xs" breakpoint) */
+@media (max-width: 599.98px) {
+    /* Tighter page gutters */
+    .mud-container {
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+
+    .mud-main-content > .mud-container {
+        padding-top: 12px;
+    }
+
+    /* Smaller headings (page titles, stat values) */
+    .mud-typography-h4 {
+        font-size: 1.375rem;
+    }
+
+    .mud-typography-h6 {
+        font-size: 1.0625rem;
+    }
+
+    /* Tighter table cells in stacked mobile mode */
+    .mud-table-cell {
+        padding: 6px 10px;
+    }
+
+    /* Tighter table toolbars */
+    .mud-table-toolbar {
+        padding-left: 12px;
+        padding-right: 8px;
+        min-height: 48px;
+    }
+
+    /* Compact table pager */
+    .mud-table-pagination-toolbar {
+        padding-left: 4px;
+    }
+}

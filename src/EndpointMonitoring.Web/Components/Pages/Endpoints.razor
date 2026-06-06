@@ -25,19 +25,19 @@
         <MudTh>Actions</MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd>
+        <MudTd DataLabel="Name">
             <MudText Typo="Typo.body1"><b>@context.Name</b></MudText>
             <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Description</MudText>
         </MudTd>
-        <MudTd>
+        <MudTd DataLabel="Provider">
             <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@context.ProviderType</MudChip>
         </MudTd>
-        <MudTd>@context.IntervalSeconds s</MudTd>
-        <MudTd>
+        <MudTd DataLabel="Interval" HideSmall="true">@context.IntervalSeconds s</MudTd>
+        <MudTd DataLabel="Enabled">
             <MudSwitch Value="context.IsEnabled" Color="Color.Success"
                        ValueChanged="(bool v) => ToggleEnabledAsync(context, v)" />
         </MudTd>
-        <MudTd>
+        <MudTd DataLabel="Actions">
             <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                            OnClick="() => OpenEditDialog(context)" />
             <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
