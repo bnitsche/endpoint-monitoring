@@ -51,12 +51,13 @@ public sealed class EmailNotificationService(
             await client.DisconnectAsync(quit: true, cancellationToken);
 
             logger.LogInformation(
-                "Alert email sent for endpoint '{Endpoint}' to {Count} recipient(s).",
-                endpoint.Name, recipients.Count);
+                "Alert email sent for endpoint '{Endpoint}' ({Provider}) to {Count} recipient(s).",
+                endpoint.Name, endpoint.ProviderType, recipients.Count);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to send alert email for endpoint '{Endpoint}'.", endpoint.Name);
+            logger.LogError(ex, "Failed to send alert email for endpoint '{Endpoint}' ({Provider}).",
+                endpoint.Name, endpoint.ProviderType);
         }
     }
 

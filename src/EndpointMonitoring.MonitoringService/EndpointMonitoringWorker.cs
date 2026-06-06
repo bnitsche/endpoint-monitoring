@@ -143,7 +143,8 @@ public class EndpointMonitoringWorker : BackgroundService
             {
                 // Alert stays set until manually acknowledged on the dashboard,
                 // so operators see the "Recovered – unacknowledged" state.
-                _logger.LogInformation("Endpoint '{Name}' recovered — awaiting acknowledgement.", endpoint.Name);
+                _logger.LogInformation("Endpoint '{Name}' ({Provider}) recovered — awaiting acknowledgement.",
+                    endpoint.Name, provider.DisplayName);
             }
         }
 
@@ -151,8 +152,9 @@ public class EndpointMonitoringWorker : BackgroundService
         await _hubClient.NotifyCheckCompletedAsync(endpoint.Id);
 
         _logger.LogInformation(
-            "Endpoint '{Name}': {Status} ({ResponseTimeMs}ms) – {Message}",
+            "Endpoint '{Name}' ({Provider}): {Status} ({ResponseTimeMs}ms) – {Message}",
             endpoint.Name,
+            provider.DisplayName,
             result.IsSuccess ? "OK" : "FAIL",
             result.ResponseTimeMs,
             result.StatusMessage);

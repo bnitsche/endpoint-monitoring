@@ -1,10 +1,13 @@
 @page "/logs"
 @attribute [Authorize(Policy = "AdminOnly")]
 @using System.Globalization
+@using System.Text
 @using EndpointMonitoring.Core.Logging
 @using EndpointMonitoring.Web.Services
 @using Microsoft.Extensions.Logging
+@using Microsoft.JSInterop
 @inject LogStreamService LogStream
+@inject IJSRuntime JS
 @implements IDisposable
 
 <PageTitle>Logs – Endpoint Monitoring</PageTitle>
@@ -34,9 +37,8 @@
     </MudItem>
 </MudGrid>
 
-<MudTable Items="FilteredEntries" Hover="true" Dense="true" Elevation="2"
-          FixedHeader="true" Height="62vh" Virtualize="true">
-    <ToolBarContent>
+<MudPaper Elevation="2">
+    <MudToolBar Class="px-4">
         <MudText Typo="Typo.h6">Live Log</MudText>
         <MudSpacer />
         @if (_lastSignalAt.HasValue)
@@ -53,10 +55,26 @@
             <MudIconButton Icon="@(_paused ? Icons.Material.Filled.PlayArrow : Icons.Material.Filled.Pause)"
                            Color="@(_paused ? Color.Warning : Color.Default)" OnClick="TogglePause" />
         </MudTooltip>
+        <MudTooltip Text="@(_plainTextView ? "Show as table" : "Show as plain text")">
+            <MudIconButton Icon="@(_plainTextView ? Icons.Material.Filled.TableRows : Icons.Material.Filled.Subject)"
+                           Color="@(_plainTextView ? Color.Primary : Color.Default)" OnClick="TogglePlainText" />
+        </MudTooltip>
+        <MudTooltip Text="Export as text file">
+            <MudIconButton Icon="@Icons.Material.Filled.Download" OnClick="ExportAsync" />
+        </MudTooltip>
         <MudTooltip Text="Clear view">
             <MudIconButton Icon="@Icons.Material.Filled.DeleteSweep" OnClick="ClearView" />
         </MudTooltip>
-    </ToolBarContent>
+    </MudToolBar>
+
+@if (_plainTextView)
+{
+    <pre class="log-plain">@BuildPlainText(FilteredEntries)</pre>
+}
+else
+{
+<MudTable Items="FilteredEntries" Hover="true" Dense="true" Elevation="0"
+          FixedHeader="true" Height="62vh" Virtualize="true">
     <HeaderContent>
         <MudTh Style="width: 170px;">Time</MudTh>
         <MudTh Style="width: 110px;">Level</MudTh>
@@ -91,8 +109,21 @@
         <MudText Typo="Typo.body2" Class="pa-4">No log entries match the current filter.</MudText>
     </NoRecordsContent>
 </MudTable>
+}
+</MudPaper>
 
 <style>
+    pre.log-plain {
+        margin: 0;
+        padding: 12px 16px;
+        height: 62vh;
+        overflow: auto;
+        font-size: 0.8rem;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
     pre.log-exception {
         margin: 4px 0 0;
         padding: 4px 8px;
@@ -112,6 +143,7 @@
     private LogLevel _minLevel = LogLevel.Information;
     private string? _search;
     private bool _paused;
+    private bool _plainTextView;
     private CultureInfo _culture = CultureInfo.CurrentCulture;
     private DateTime? _lastSignalAt;
 
@@ -157,6 +189,43 @@
     }
 
     private void ClearView() => _entries = [];
+
+    private void TogglePlainText() => _plainTextView = !_plainTextView;
+
+    /// <summary>Formats entries as plain text, one line per entry, exceptions indented below.</summary>
+    private string BuildPlainText(IEnumerable<LogEntry> entries)
+    {
+        var sb = new StringBuilder();
+        foreach (var e in entries)
+        {
+            sb.Append(e.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture))
+              .Append(" [").Append(LevelLabel(e.Level)).Append(']')
+              .Append(" [").Append(e.ServiceName).Append("] ")
+              .Append(e.Category).Append(": ")
+              .AppendLine(e.Message);
+
+            if (!string.IsNullOrEmpty(e.Exception))
+            {
+                foreach (var line in e.Exception.Split('\n'))
+                    sb.Append("    ").AppendLine(line.TrimEnd('\r'));
+            }
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>Downloads the currently filtered entries (oldest first) as a UTF-8 text file.</summary>
+    private async Task ExportAsync()
+    {
+        var text = BuildPlainText(FilteredEntries.Reverse());
+        var fileName = $"endpoint-monitoring-logs-{DateTime.Now:yyyyMMdd-HHmmss}.txt";
+
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(text));
+        using var streamRef = new DotNetStreamReference(stream);
+
+        await using var module = await JS.InvokeAsync<IJSObjectReference>(
+            "import", "./Components/Pages/Logs.razor.js");
+        await module.InvokeVoidAsync("downloadFileFromStream", fileName, streamRef);
+    }
 
     private static Color LevelColor(LogLevel level) => level switch
     {
