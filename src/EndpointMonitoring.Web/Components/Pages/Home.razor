@@ -83,15 +83,18 @@ else
                 }
                 else if (context.IsSuccess == true && !context.HasUnacknowledgedAlert)
                 {
-                    <MudChip T="string" Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.CheckCircle">OK</MudChip>
+                    <MudChip T="string" Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.CheckCircle"
+                             Href="@HistoryLink(context.EndpointId, failOnly: false)">OK</MudChip>
                 }
                 else if (context.IsSuccess == true && context.HasUnacknowledgedAlert)
                 {
-                    <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.WarningAmber">Recovered</MudChip>
+                    <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.WarningAmber"
+                             Href="@HistoryLink(context.EndpointId, failOnly: true)">Recovered</MudChip>
                 }
                 else
                 {
-                    <MudChip T="string" Color="Color.Error" Size="Size.Small" Icon="@Icons.Material.Filled.Error">FAIL</MudChip>
+                    <MudChip T="string" Color="Color.Error" Size="Size.Small" Icon="@Icons.Material.Filled.Error"
+                             Href="@HistoryLink(context.EndpointId, failOnly: true)">FAIL</MudChip>
                 }
             </MudTd>
             <MudTd DataLabel="Last Check">@FmtDate(context.CheckedAt)</MudTd>
@@ -136,6 +139,11 @@ else
     private DateTime? _lastSignalAt;
 
     private string FmtDate(DateTime? dt) => dt?.ToLocalTime().ToString("G", _culture) ?? "–";
+
+    private static string HistoryLink(int endpointId, bool failOnly) =>
+        failOnly
+            ? $"/history?endpointId={endpointId}&status=fail"
+            : $"/history?endpointId={endpointId}";
 
     private string GetRowClass(StatusRow row, int _) =>
         _highlightedRows.Contains(row.EndpointId) ? "row-flash" : string.Empty;

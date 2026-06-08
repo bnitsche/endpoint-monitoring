@@ -103,6 +103,12 @@
     private List<ResultRow> _results = [];
     private int _jumpToPage = 1;
 
+    [SupplyParameterFromQuery(Name = "endpointId")]
+    public int? EndpointIdQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "status")]
+    public string? StatusQuery { get; set; }
+
     private int TotalPages => _table is { RowsPerPage: > 0 }
         ? (int)Math.Ceiling((double)_results.Count / _table.RowsPerPage)
         : 1;
@@ -111,6 +117,19 @@
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         _endpoints = await db.Endpoints.OrderBy(e => e.Name).ToListAsync();
+
+        if (EndpointIdQuery.HasValue)
+        {
+            // Arrived via a link from the dashboard: pre-filter for this endpoint
+            // and show entries across the full history rather than the default window.
+            _selectedEndpointId = EndpointIdQuery;
+            _from = null;
+            _to = null;
+            _statusFilter = string.Equals(StatusQuery, "fail", StringComparison.OrdinalIgnoreCase)
+                ? false
+                : null;
+        }
+
         await LoadResultsAsync();
     }
 
