@@ -146,25 +146,27 @@ public static class TopologyLayout
             $"L {mx:0.#} {c2:0.#} Q {mx:0.#} {ry:0.#} {t2:0.#} {ry:0.#} L {rx:0.#} {ry:0.#}");
     }
 
+    /// <summary>Breathing room between a right-aligned edge label and the vertical bend it stops at.</summary>
+    public const double LabelBendGap = 6;
+
     /// <summary>
-    /// Point on the edge used to anchor its label: the center of the vertical bend segment,
-    /// which always lies in the clear gap between columns (never on top of a node box).
+    /// Right-edge anchor for an edge's label: the vertical bend at the center of the column gap,
+    /// at the target (right-hand) card's vertical center. The label is rendered right-aligned to
+    /// this point (see SvgEdgeLabel), so it stays level with its target card while leaving the
+    /// horizontal run-in segment to the card uncovered.
     /// </summary>
     public static (double X, double Y) EdgeMid(TopoNode from, TopoNode to)
     {
         if (Math.Abs(from.X - to.X) < 1)
         {
+            // Same column (no labelled edges today): anchor at the bottom card's top-center.
             var (top, bottom) = from.Y <= to.Y ? (from, to) : (to, from);
             return (top.X + top.Width / 2, (top.Y + NodeH + bottom.Y) / 2);
         }
 
         var (left, right) = from.X <= to.X ? (from, to) : (to, from);
-        var lx = left.X + left.Width;
-        var ly = left.Y + NodeH / 2;
-        var rx = right.X;
-        var ry = right.Y + NodeH / 2;
-
-        return ((lx + rx) / 2, (ly + ry) / 2);
+        var bend = (left.X + left.Width + right.X) / 2;
+        return (bend - LabelBendGap, right.Y + NodeH / 2);
     }
 
     /// <summary>Formats an SVG coordinate with invariant culture (German locale would emit ',' and break paths).</summary>

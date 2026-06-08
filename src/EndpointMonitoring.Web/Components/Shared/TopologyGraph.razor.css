@@ -44,17 +44,21 @@
 /* Edge labels ride in an opaque pill so the connector behind them is masked and the text
    stays legible. Text/rect are injected as raw markup (Razor reserves <text>), so they carry
    no CSS-isolation scope attribute — match them via ::deep under the scoped svg. */
+/* Slight transparency (~20%) so labels sit lightly over the connectors. */
+.topo-svg ::deep .topo-edge-label-grp {
+    opacity: 0.8;
+}
+
 .topo-svg ::deep .topo-edge-label-bg {
     fill: var(--mud-palette-surface);
     stroke: var(--mud-palette-lines-default);
     stroke-width: 1;
-    opacity: 0.96;
 }
 
 .topo-svg ::deep .topo-edge-label {
     fill: var(--mud-palette-text-secondary);
     font-size: 11px;
-    text-anchor: middle;
+    text-anchor: end;
 }
 
 /* ---- Nodes ---- */

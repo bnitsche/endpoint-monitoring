@@ -125,14 +125,15 @@
     }
 
     /// <summary>
-    /// Renders an edge label as a centered "pill" (opaque rounded rect + text) so the connector
-    /// line behind it is masked and the text stays legible wherever the edge runs. Width is
+    /// Renders an edge label as an opaque "pill" (rounded rect + text) right-aligned to <paramref name="x"/>
+    /// so it hugs the left edge of its target card, masking the connector line behind it. Width is
     /// estimated from the character count since text cannot be measured server-side.
     /// </summary>
     private static MarkupString SvgEdgeLabel(double x, double y, string content)
     {
-        var width = content.Length * 6.3 + 16;
-        var rectX = x - width / 2;
+        const double padX = 8;
+        var width = content.Length * 6.3 + padX * 2;
+        var rectX = x - width;
         var rectY = y - 9;
         var text = System.Net.WebUtility.HtmlEncode(content);
 
@@ -140,7 +141,7 @@
             "<g class=\"topo-edge-label-grp\">"
             + $"<rect class=\"topo-edge-label-bg\" x=\"{TopologyLayout.Fmt(rectX)}\" y=\"{TopologyLayout.Fmt(rectY)}\" "
             + $"width=\"{TopologyLayout.Fmt(width)}\" height=\"18\" rx=\"9\" />"
-            + $"<text class=\"topo-edge-label\" x=\"{TopologyLayout.Fmt(x)}\" y=\"{TopologyLayout.Fmt(y + 4)}\">{text}</text>"
+            + $"<text class=\"topo-edge-label\" x=\"{TopologyLayout.Fmt(x - padX)}\" y=\"{TopologyLayout.Fmt(y + 4)}\">{text}</text>"
             + "</g>";
         return (MarkupString)markup;
     }
