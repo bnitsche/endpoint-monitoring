@@ -81,6 +81,9 @@ public sealed class TopoNode
     /// <summary>Layout column: 0 = frontends, 1 = web app/db, 2 = monitoring service, 3 = endpoints.</summary>
     public int Column { get; set; }
 
+    /// <summary>Card width in SVG user units (auto-sized to the content), assigned by the layout.</summary>
+    public double Width { get; set; }
+
     /// <summary>Left edge in SVG user units, assigned by the layout.</summary>
     public double X { get; set; }
 
@@ -88,7 +91,7 @@ public sealed class TopoNode
     public double Y { get; set; }
 }
 
-/// <summary>A directed edge between two topology nodes, drawn as a cubic bezier.</summary>
+/// <summary>A directed edge between two topology nodes, drawn as a rounded orthogonal connector.</summary>
 public sealed class TopoEdge
 {
     /// <summary>Unique edge id (used to target pulse animations).</summary>

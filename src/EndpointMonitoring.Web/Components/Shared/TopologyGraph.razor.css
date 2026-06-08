@@ -14,6 +14,8 @@
     fill: none;
     stroke: var(--mud-palette-lines-default);
     stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
 }
 
 .topo-edge.up {
@@ -39,8 +41,16 @@
     to   { stroke-dashoffset: 8; }
 }
 
-/* Text elements are injected as raw markup (Razor reserves <text>), so they carry no
-   CSS-isolation scope attribute — match them via ::deep under the scoped svg. */
+/* Edge labels ride in an opaque pill so the connector behind them is masked and the text
+   stays legible. Text/rect are injected as raw markup (Razor reserves <text>), so they carry
+   no CSS-isolation scope attribute — match them via ::deep under the scoped svg. */
+.topo-svg ::deep .topo-edge-label-bg {
+    fill: var(--mud-palette-surface);
+    stroke: var(--mud-palette-lines-default);
+    stroke-width: 1;
+    opacity: 0.96;
+}
+
 .topo-svg ::deep .topo-edge-label {
     fill: var(--mud-palette-text-secondary);
     font-size: 11px;
@@ -49,20 +59,69 @@
 
 /* ---- Nodes ---- */
 
+.topo-node {
+    filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.28));
+    transition: filter 0.15s ease;
+}
+
+.topo-node:hover {
+    filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.42));
+}
+
 .topo-rect {
     fill: var(--mud-palette-surface);
     stroke: var(--mud-palette-lines-default);
-    stroke-width: 1.5;
+    stroke-width: 1;
 }
 
-.topo-node.success .topo-rect { stroke: var(--mud-palette-success); }
-.topo-node.error   .topo-rect { stroke: var(--mud-palette-error); }
-.topo-node.warning .topo-rect { stroke: var(--mud-palette-warning); }
+/* Top-light / bottom-shade gradient overlay, clipped to the rounded card. */
+.topo-sheen {
+    fill: url(#topo-node-sheen);
+    pointer-events: none;
+}
 
+/* Full-height status stripe down the left edge of the card. */
+.topo-accent { fill: var(--mud-palette-lines-default); }
+.topo-node.success .topo-accent { fill: var(--mud-palette-success); }
+.topo-node.error   .topo-accent { fill: var(--mud-palette-error); }
+.topo-node.warning .topo-accent { fill: var(--mud-palette-warning); }
+
+/* Live status beacon: a solid dot with a soft expanding ring for healthy/failing nodes. */
 .topo-status-dot { fill: var(--mud-palette-text-secondary); }
 .topo-node.success .topo-status-dot { fill: var(--mud-palette-success); }
 .topo-node.error   .topo-status-dot { fill: var(--mud-palette-error); }
 .topo-node.warning .topo-status-dot { fill: var(--mud-palette-warning); }
+
+.topo-pulse {
+    fill: transparent;
+    transform-box: fill-box;
+    transform-origin: center;
+}
+
+.topo-node.success .topo-pulse {
+    fill: var(--mud-palette-success);
+    animation: topoBeacon 2.4s ease-out infinite;
+}
+
+.topo-node.error .topo-pulse {
+    fill: var(--mud-palette-error);
+    animation: topoBeacon 1.3s ease-out infinite;
+}
+
+@keyframes topoBeacon {
+    0%   { r: 4px; opacity: 0.55; }
+    100% { r: 13px; opacity: 0; }
+}
+
+/* Failing nodes pulse a red glow to draw the eye. */
+.topo-node.error {
+    animation: topoErrorGlow 1.6s ease-in-out infinite;
+}
+
+@keyframes topoErrorGlow {
+    0%, 100% { filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.28)); }
+    50%      { filter: drop-shadow(0 0 9px var(--mud-palette-error)); }
+}
 
 .topo-icon {
     fill: var(--mud-palette-text-secondary);
@@ -71,7 +130,7 @@
 .topo-svg ::deep .topo-label {
     fill: var(--mud-palette-text-primary);
     font-size: 13px;
-    font-weight: 500;
+    font-weight: 600;
 }
 
 .topo-svg ::deep .topo-sublabel {
