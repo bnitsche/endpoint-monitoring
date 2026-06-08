@@ -149,6 +149,7 @@ builder.Services.AddSingleton<IMonitoringUpdateNotifier, MonitoringUpdateNotifie
 // System topology page: track connected browser circuits and the monitoring-service hub link.
 builder.Services.AddSingleton<ConnectedClientRegistry>();
 builder.Services.AddSingleton<MonitoringServiceLinkRegistry>();
+builder.Services.AddScoped<CircuitContext>();
 builder.Services.AddScoped<CircuitHandler, TrackingCircuitHandler>();
 
 // Real-time log streaming: buffer web + monitoring-service logs and push them to the Logs page.

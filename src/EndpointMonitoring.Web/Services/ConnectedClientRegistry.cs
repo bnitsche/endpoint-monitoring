@@ -43,6 +43,16 @@ public sealed class ConnectedClientRegistry
         OnChanged?.Invoke();
     }
 
+    /// <summary>Backfills the remote IP of the given circuit once it has been resolved, if tracked.</summary>
+    public void SetRemoteIp(string circuitId, string remoteIp)
+    {
+        if (_clients.TryGetValue(circuitId, out var client) && client.RemoteIp != remoteIp)
+        {
+            _clients[circuitId] = client with { RemoteIp = remoteIp };
+            OnChanged?.Invoke();
+        }
+    }
+
     /// <summary>Updates the connection state of the given circuit, if tracked.</summary>
     public void SetState(string circuitId, ClientConnectionState state)
     {

@@ -17,6 +17,7 @@
 
 <body>
     <Routes @rendermode="PageRenderMode" />
+    <ClientInfoReporter RemoteIp="@_remoteIp" @rendermode="PageRenderMode" />
     <ReconnectModal />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
@@ -32,4 +33,8 @@
     // (the Account/login pages), which must be static SSR so HttpContext.SignInAsync works.
     private IComponentRenderMode? PageRenderMode =>
         HttpContext.AcceptsInteractiveRouting() ? InteractiveServer : null;
+
+    // Captured here on the initial GET (HttpContext available, real client IP populated) and handed
+    // to ClientInfoReporter, which carries it into the circuit where the WebSocket request cannot.
+    private string _remoteIp => EndpointMonitoring.Web.Services.ClientIp.Resolve(HttpContext);
 }

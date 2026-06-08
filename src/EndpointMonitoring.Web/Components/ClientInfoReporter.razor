@@ -1,0 +1,28 @@
+@using EndpointMonitoring.Web.Services
+@inject CircuitContext CircuitContext
+@inject ConnectedClientRegistry Registry
+
+@* Renders nothing; it only carries the client IP from the initial HTTP request into the circuit. *@
+
+@code {
+    /// <summary>
+    /// Client IP captured during the initial page request (where it is reliably available, unlike the
+    /// circuit's own WebSocket request under IIS in-process hosting). Passed as a parameter so it is
+    /// serialized into the page and restored when the interactive circuit starts.
+    /// </summary>
+    [Parameter]
+    public string? RemoteIp { get; set; }
+
+    /// <summary>
+    /// OnAfterRender runs only on the interactive circuit (never during static prerender), so by here
+    /// the circuit has opened and <see cref="CircuitContext.CircuitId"/> is set by the circuit handler.
+    /// </summary>
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        if (CircuitContext.CircuitId is { } circuitId && !string.IsNullOrWhiteSpace(RemoteIp))
+            Registry.SetRemoteIp(circuitId, RemoteIp);
+    }
+}

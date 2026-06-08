@@ -12,16 +12,23 @@ public sealed class TrackingCircuitHandler : CircuitHandler
 {
     private readonly ConnectedClientRegistry _registry;
     private readonly AuthenticationStateProvider _authStateProvider;
+    private readonly CircuitContext _circuitContext;
     private readonly string _remoteIp;
 
-    /// <summary>Captures the remote IP from the circuit-establishing request (HttpContext is only available at that point).</summary>
+    /// <summary>
+    /// Captures the remote IP from the circuit-establishing request. This works under direct Kestrel
+    /// (development) but yields "unknown" for the WebSocket circuit under IIS in-process hosting; the
+    /// <c>ClientInfoReporter</c> component backfills the real IP captured during the initial page request.
+    /// </summary>
     public TrackingCircuitHandler(ConnectedClientRegistry registry,
                                   AuthenticationStateProvider authStateProvider,
+                                  CircuitContext circuitContext,
                                   IHttpContextAccessor httpContextAccessor)
     {
         _registry = registry;
         _authStateProvider = authStateProvider;
-        _remoteIp = httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        _circuitContext = circuitContext;
+        _remoteIp = ClientIp.Resolve(httpContextAccessor.HttpContext);
     }
 
     /// <inheritdoc />
@@ -34,6 +41,9 @@ public sealed class TrackingCircuitHandler : CircuitHandler
             ? user.Identity.Name ?? "(unknown)"
             : "(anonymous)";
         var role = user.FindFirst(ClaimTypes.Role)?.Value;
+
+        // Expose the circuit id so ClientInfoReporter can backfill the IP onto this same entry.
+        _circuitContext.CircuitId = circuit.Id;
 
         _registry.Add(new ConnectedClient(circuit.Id, userName, role, _remoteIp,
                                           DateTime.Now, ClientConnectionState.Connected));
