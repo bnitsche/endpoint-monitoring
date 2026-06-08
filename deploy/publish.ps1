@@ -103,7 +103,25 @@ function Invoke-Publish {
 
     & dotnet publish @publishArgs
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed for $Label (exit $LASTEXITCODE)." }
+
+    Remove-EnvAppSettings -Dir $Out -Label $Label
     Write-Ok "$Label -> $Out"
+}
+
+# Ship only the base appsettings.json. Environment-specific overrides
+# (appsettings.Development.json, appsettings.Production.json, ...) must not be packaged.
+function Remove-EnvAppSettings {
+    param([string]$Dir, [string]$Label)
+
+    if (-not (Test-Path $Dir)) { return }
+
+    $extra = Get-ChildItem -LiteralPath $Dir -Filter 'appsettings.*.json' -File |
+        Where-Object { $_.Name -ne 'appsettings.json' }
+
+    foreach ($file in $extra) {
+        Remove-Item -LiteralPath $file.FullName -Force
+        Write-Info "excluded $Label\$($file.Name)"
+    }
 }
 
 if (-not $SkipWeb)     { Invoke-Publish -Project $WebProject     -Out $WebOut     -Label 'Web application' }
