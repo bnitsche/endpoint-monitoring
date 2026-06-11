@@ -2,6 +2,7 @@
 @using EndpointMonitoring.Core.Data
 @using EndpointMonitoring.Core.Models
 @using EndpointMonitoring.Web.Services
+@using EndpointMonitoring.Web.Components.Shared
 @using Microsoft.EntityFrameworkCore
 @using System.Globalization
 @inject IDbContextFactory<AppDbContext> DbFactory
@@ -115,6 +116,10 @@ else
             </MudTd>
         </RowTemplate>
     </MudTable>
+
+    <div class="mt-4 mt-sm-6">
+        <FailureTimeline />
+    </div>
 }
 
 <style>

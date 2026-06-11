@@ -1,0 +1,277 @@
+@using EndpointMonitoring.Core.Data
+@using EndpointMonitoring.Web.Services
+@using MudBlazor.Charts
+@using Microsoft.EntityFrameworkCore
+@using System.Globalization
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject IMonitoringUpdateNotifier UpdateNotifier
+@implements IDisposable
+
+<MudPaper Elevation="2" Class="pa-2 pa-sm-4 mb-4 mb-sm-6">
+    <div class="d-flex flex-wrap align-center mb-3" style="gap:12px;">
+        <MudIcon Icon="@Icons.Material.Filled.Timeline" Color="Color.Primary" />
+        <MudText Typo="Typo.h6">Failure Timeline</MudText>
+        <MudText Typo="Typo.caption" Color="Color.Default">@_rangeCaption</MudText>
+        <MudSpacer />
+
+        <MudToggleGroup T="Granularity" Value="_granularity" ValueChanged="OnGranularityChanged"
+                        Color="Color.Primary" Size="Size.Small" Outlined="true"
+                        CheckMark="false" SelectionMode="SelectionMode.SingleSelection">
+            <MudToggleItem Value="Granularity.LastHour" Text="Last hour" />
+            <MudToggleItem Value="Granularity.Last24Hours" Text="24 hours" />
+            <MudToggleItem Value="Granularity.Last7Days" Text="7 days" />
+            <MudToggleItem Value="Granularity.LastMonth" Text="Month" />
+        </MudToggleGroup>
+
+        <MudToggleGroup T="TimelineChartType" Value="_chartType" ValueChanged="OnChartTypeChanged"
+                        Color="Color.Secondary" Size="Size.Small" Outlined="true"
+                        CheckMark="false" SelectionMode="SelectionMode.SingleSelection">
+            <MudToggleItem Value="TimelineChartType.StackedBar">
+                <MudTooltip Text="Stacked bars"><MudIcon Icon="@Icons.Material.Filled.BarChart" Size="Size.Small" /></MudTooltip>
+            </MudToggleItem>
+            <MudToggleItem Value="TimelineChartType.Line">
+                <MudTooltip Text="Lines"><MudIcon Icon="@Icons.Material.Filled.ShowChart" Size="Size.Small" /></MudTooltip>
+            </MudToggleItem>
+        </MudToggleGroup>
+
+        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="LoadAsync" />
+    </div>
+
+    @if (!_initialized)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="my-8" />
+    }
+    else if (_series.Count == 0)
+    {
+        <div class="d-flex flex-column align-center justify-center py-8" style="color:var(--mud-palette-text-secondary);">
+            <MudIcon Icon="@Icons.Material.Filled.SentimentVerySatisfied" Size="Size.Large" />
+            <MudText Typo="Typo.body2" Class="mt-2">No endpoint failures in this period.</MudText>
+        </div>
+    }
+    else
+    {
+        <MudChart T="double"
+                  ChartType="@(_chartType == TimelineChartType.StackedBar ? ChartType.StackedBar : ChartType.Line)"
+                  ChartSeries="_series" ChartLabels="_labels" ChartOptions="_options"
+                  Width="100%" Height="350px" />
+    }
+</MudPaper>
+
+@code {
+    private enum Granularity { LastHour, Last24Hours, Last7Days, LastMonth }
+    private enum TimelineChartType { StackedBar, Line }
+
+    private bool _initialized;
+    private Granularity _granularity = Granularity.Last24Hours;
+    private TimelineChartType _chartType = TimelineChartType.StackedBar;
+    private readonly CultureInfo _culture = CultureInfo.CurrentCulture;
+
+    private List<ChartSeries<double>> _series = [];
+    private string[] _labels = [];
+    private string _rangeCaption = string.Empty;
+    private IChartOptions _options = new StackedBarChartOptions();
+
+    private double _maxStacked;
+    private double _maxLine;
+    private bool _refreshQueued;
+
+    // Vibrant, well-separated colors – one per endpoint (wraps if more endpoints than entries).
+    private static readonly string[] Palette =
+    [
+        "#2196F3", "#F44336", "#4CAF50", "#FF9800", "#9C27B0", "#00BCD4",
+        "#FFC107", "#795548", "#E91E63", "#3F51B5", "#8BC34A", "#FF5722",
+        "#009688", "#673AB7", "#CDDC39", "#607D8B"
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        UpdateNotifier.OnEndpointChecked += OnEndpointChecked;
+        await LoadAsync();
+    }
+
+    public void Dispose() => UpdateNotifier.OnEndpointChecked -= OnEndpointChecked;
+
+    private async Task OnGranularityChanged(Granularity value)
+    {
+        _granularity = value;
+        await LoadAsync();
+    }
+
+    private void OnChartTypeChanged(TimelineChartType value)
+    {
+        // Switching the visualization needs no DB round-trip – just rebuild the options.
+        _chartType = value;
+        BuildOptions();
+    }
+
+    // Coalescing throttle: failures are rare and the timeline is a trend view, so we
+    // refresh at most once per window no matter how many checks stream in. The trailing
+    // reload always reads the latest data, so notifications dropped during the window
+    // are still reflected. This avoids re-rendering (and re-animating) the chart on every check.
+    private void OnEndpointChecked(int endpointId)
+    {
+        if (_refreshQueued)
+            return;
+
+        _refreshQueued = true;
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5));
+                await LoadAsync();
+            }
+            finally
+            {
+                _refreshQueued = false;
+            }
+        });
+    }
+
+    private (TimeSpan Bucket, int Count) GranularityShape() => _granularity switch
+    {
+        Granularity.LastHour    => (TimeSpan.FromMinutes(5), 12),  // 1 hour
+        Granularity.Last24Hours => (TimeSpan.FromHours(1), 24),    // 24 hours
+        Granularity.Last7Days   => (TimeSpan.FromDays(1), 7),      // 7 days
+        // One daily bucket per day of the last calendar month, up to and including today
+        // (28–31 buckets depending on the month).
+        _                       => (TimeSpan.FromDays(1), (DateTime.Today - DateTime.Today.AddMonths(-1)).Days),
+    };
+
+    private static DateTime RoundUp(DateTime dt, TimeSpan span)
+    {
+        var rem = dt.Ticks % span.Ticks;
+        return rem == 0 ? dt : new DateTime(dt.Ticks - rem + span.Ticks, dt.Kind);
+    }
+
+    private string BucketLabel(DateTime bucketStartLocal, int index) => _granularity switch
+    {
+        // 24 hourly buckets would crowd the axis – only label every 3rd.
+        Granularity.Last24Hours => index % 3 == 0 ? bucketStartLocal.ToString("HH:mm", _culture) : string.Empty,
+        Granularity.LastHour    => bucketStartLocal.ToString("HH:mm", _culture),
+        // ~30 daily buckets would crowd the axis – only label every 5th.
+        Granularity.LastMonth   => index % 5 == 0 ? bucketStartLocal.ToString("dd.MM", _culture) : string.Empty,
+        _                       => bucketStartLocal.ToString("ddd dd.MM", _culture),
+    };
+
+    private void BuildOptions()
+    {
+        var max = _chartType == TimelineChartType.StackedBar ? _maxStacked : _maxLine;
+        var ticks = Math.Max(1, (int)Math.Ceiling(max / 5.0));
+
+        _options = _chartType == TimelineChartType.StackedBar
+            ? new StackedBarChartOptions
+            {
+                ChartPalette = Palette,
+                ShowLegend = true,
+                YAxisTicks = ticks,
+                YAxisFormat = "0",
+            }
+            : new LineChartOptions
+            {
+                ChartPalette = Palette,
+                ShowLegend = true,
+                YAxisTicks = ticks,
+                YAxisFormat = "0",
+                YAxisRequireZeroPoint = true,
+                ShowDataMarkers = true,
+                InterpolationOption = InterpolationOption.Straight,
+            };
+
+        StateHasChanged();
+    }
+
+    private async Task LoadAsync()
+    {
+        // Note: we deliberately do NOT flip to a loading state here. Replacing the chart
+        // with a spinner on every refresh is what caused the flicker; instead we keep the
+        // current chart on screen and swap in the new data once it's ready.
+        var (bucket, count) = GranularityShape();
+
+        var nowLocal = DateTime.Now;
+        var endLocal = RoundUp(nowLocal, bucket);
+        var startLocal = endLocal - count * bucket;
+        var startUtc = startLocal.ToUniversalTime();
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var endpoints = await db.Endpoints
+            .Where(e => e.IsEnabled)
+            .OrderBy(e => e.Name)
+            .Select(e => new { e.Id, e.Name })
+            .ToListAsync();
+
+        // Results inside the window (chronological), plus each endpoint's last result
+        // just before the window so we can tell whether the first in-window failure
+        // is the start of a new outage or the continuation of an existing one.
+        var windowResults = await db.Results
+            .Where(r => r.CheckedAt >= startUtc)
+            .OrderBy(r => r.CheckedAt)
+            .Select(r => new { r.EndpointId, r.CheckedAt, r.IsSuccess })
+            .ToListAsync();
+
+        var priorState = (await db.Results
+            .Where(r => r.CheckedAt < startUtc)
+            .GroupBy(r => r.EndpointId)
+            .Select(g => g.OrderByDescending(r => r.CheckedAt).First())
+            .ToListAsync())
+            .ToDictionary(r => r.EndpointId, r => r.IsSuccess);
+
+        // Build axis labels from the (rounded) window start.
+        _labels = Enumerable.Range(0, count)
+            .Select(i => BucketLabel(startLocal + i * bucket, i))
+            .ToArray();
+
+        var resultsByEndpoint = windowResults
+            .GroupBy(r => r.EndpointId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var series = new List<ChartSeries<double>>();
+        _maxStacked = 0;
+        _maxLine = 0;
+        var stackTotals = new double[count];
+
+        foreach (var ep in endpoints)
+        {
+            if (!resultsByEndpoint.TryGetValue(ep.Id, out var rows))
+                continue;
+
+            var data = new double[count];
+            // Seed the running state from the last result before the window.
+            bool? prevSuccess = priorState.TryGetValue(ep.Id, out var ps) ? ps : null;
+            var any = false;
+
+            foreach (var r in rows)
+            {
+                // An outage event = a transition into the failed state.
+                if (!r.IsSuccess && prevSuccess != false)
+                {
+                    var idx = (int)((r.CheckedAt.ToLocalTime() - startLocal).Ticks / bucket.Ticks);
+                    if (idx >= 0 && idx < count)
+                    {
+                        data[idx]++;
+                        any = true;
+                    }
+                }
+                prevSuccess = r.IsSuccess;
+            }
+
+            if (!any)
+                continue;
+
+            for (var i = 0; i < count; i++)
+                stackTotals[i] += data[i];
+
+            _maxLine = Math.Max(_maxLine, data.Max());
+            series.Add(new ChartSeries<double> { Name = ep.Name, Data = new ChartData<double>(data) });
+        }
+
+        _maxStacked = stackTotals.Length > 0 ? stackTotals.Max() : 0;
+        _series = series;
+
+        _rangeCaption = $"{startLocal.ToString("g", _culture)} – {endLocal.ToString("g", _culture)}";
+
+        _initialized = true;
+        BuildOptions();
+    }
+}
